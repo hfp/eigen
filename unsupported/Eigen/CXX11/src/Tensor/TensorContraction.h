@@ -23,42 +23,12 @@ namespace internal {
 #if defined(EIGEN_VECTORIZE_AVX) && defined(EIGEN_USE_LIBXSMM)
 template<typename Scalar, typename Index>
 void pack_simple(Scalar * dst, const Scalar * src, Index cols, Index rows, Index lddst, Index ldsrc) {
-  size_t psize = packet_traits<Scalar>::size;           // Packet size
-  typedef typename packet_traits<Scalar>::type Packet;  // Packet type
-  size_t alignment = psize*sizeof(Scalar);              // Needed alignment
-  if (rows % psize == 0 && (lddst*sizeof(Scalar)) % alignment == 0 &&
-     (ldsrc*sizeof(Scalar)) % alignment == 0 &&
-     reinterpret_cast<uintptr_t>(src) % alignment == 0 &&
-     reinterpret_cast<uintptr_t>(dst) % alignment == 0) {
-    // Optimized version using packets
-    size_t num_packets = rows / psize;
-    for (Index col = 0; col < cols; ++col) {
-      EIGEN_ASM_COMMENT("begin pack_simple inner copy");
-      // Unrolled manually 4 times.
-      for (size_t i=0; i < num_packets/4; ++i) {
-        internal::pstore(dst, internal::pload<Packet>(src));
-        dst += psize; src += psize;
-        internal::pstore(dst, internal::pload<Packet>(src));
-        dst += psize; src += psize;
-        internal::pstore(dst, internal::pload<Packet>(src));
-        dst += psize; src += psize;
-        internal::pstore(dst, internal::pload<Packet>(src));
-        dst += psize; src += psize;
-      }
-      for (size_t i=0; i < num_packets%4; ++i) {
-        internal::pstore(dst, internal::pload<Packet>(src));
-        dst += psize; src += psize;
-      }
-      dst += lddst - num_packets*psize;
-      src += ldsrc - num_packets*psize;
-      EIGEN_ASM_COMMENT("end pack_simple inner copy");
-    }
-  } else {
-    // Naive memcpy calls
-    for (Index col = 0; col < cols; ++col) {
-      memcpy(dst + col*lddst, src + col*ldsrc, rows*sizeof(Scalar));
-    }
-  }
+  const int prefetch = 1;
+#if !defined(NDEBUG)
+  int result =
+#endif
+  libxsmm_matcopy(dst, src, sizeof(Scalar), rows, cols, ldsrc, lddst, &prefetch);
+  assert(EXIT_SUCCESS == result);
 }
 
 template<typename LhsScalar, typename RhsScalar, typename Scalar>
