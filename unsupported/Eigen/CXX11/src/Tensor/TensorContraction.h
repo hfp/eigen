@@ -34,19 +34,20 @@ void pack_simple(Scalar * dst, const Scalar * src, Index cols, Index rows, Index
 template<typename LhsScalar, typename RhsScalar, typename Scalar, typename Index>
   struct libxsmm_wrapper {
     libxsmm_wrapper() {}
-    libxsmm_wrapper(int flags, Index /*m*/, Index /*n*/, Index /*k*/, Index /*lda*/, Index /*ldb*/, Index /*ldc*/, Scalar /*alpha*/, Scalar /*beta*/, int /*prefetch*/) {}
+    libxsmm_wrapper(int /*flags*/, Index /*m*/, Index /*n*/, Index /*k*/, Index /*lda*/, Index /*ldb*/, Index /*ldc*/,
+        float/*Scalar alpha*/, float/*Scalar beta*/, int /*prefetch*/) {}
     void operator()(const LhsScalar*, const RhsScalar*, Scalar*) {}
     void operator()(const LhsScalar*, const RhsScalar*, Scalar*, const LhsScalar*, const RhsScalar*, const Scalar*) {}
   };
 
-  template<typename Index>
+template<typename Index>
   struct libxsmm_wrapper<float, float, float, Index>: public libxsmm_mmfunction<float> {
     libxsmm_wrapper(): libxsmm_mmfunction() {}
     libxsmm_wrapper(int flags, Index m, Index n, Index k, Index lda, Index ldb, Index ldc, float alpha, float beta, int prefetch) :
         libxsmm_mmfunction(flags, m, n, k, lda, ldb, ldc, alpha, beta, prefetch) {}
   };
 
-  template<typename Index>
+template<typename Index>
   struct libxsmm_wrapper<double, double, double, Index>: public libxsmm_mmfunction<double> {
     libxsmm_wrapper(): libxsmm_mmfunction() {}
     libxsmm_wrapper(int flags, Index m, Index n, Index k, Index lda, Index ldb, Index ldc, double alpha, double beta, int prefetch) :
@@ -732,7 +733,7 @@ protected:
           // Inner blocking
           for (Index ki = ki_outer; ki < mini(ki_outer+kc_outer, k); ki += kc) {
             const Index actual_kc = mini(ki_outer+kc_outer, mini(ki+kc, k)) - ki;
-            const Scalar beta = static_cast<Scalar>(ki == 0 ? 0 : 1);
+            const float beta = static_cast<float>(ki == 0 ? 0 : 1);
 
             if (copyB) {
               if (transposeB) {
