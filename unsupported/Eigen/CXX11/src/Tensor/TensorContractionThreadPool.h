@@ -1166,7 +1166,7 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
           float beta = ki == 0 ? 0 : 1;
 
           Scalar * current_c = buffer + (mi*bm) + (ni*bn)*stride_c;
-          internal::libxsmm_wrapper<LhsScalar, RhsScalar, Scalar>(
+          internal::libxsmm_wrapper<LhsScalar, RhsScalar, Scalar, Index>(
               0, actual_bm(mi), actual_bn(ni), actual_bk(ki),
               current_stride_a, current_stride_b, stride_c, 1, beta, 0)
           (current_a, current_b, current_c);
