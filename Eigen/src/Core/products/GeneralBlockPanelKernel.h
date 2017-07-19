@@ -134,7 +134,7 @@ void evaluateProductBlockingSizesHeuristic(Index& k, Index& m, Index& n, Index n
 
     if (l3 > l2) {
       // l3 is shared between all cores, so we'll give each thread its own chunk of l3.
-      const Index m_cache = (l3-l2) / (sizeof(LhsScalar) * k * num_threads);
+      const Index m_cache = static_cast<Index>(l3 - l2) / (sizeof(LhsScalar) * k * num_threads);
       const Index m_per_thread = numext::div_ceil(m, num_threads);
       if(m_cache < m_per_thread && m_cache >= static_cast<Index>(mr)) {
         m = m_cache - (m_cache % mr);

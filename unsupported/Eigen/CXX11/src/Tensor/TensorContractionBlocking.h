@@ -140,7 +140,7 @@ class TensorXsmmContractionBlocking {
     size_t parallelism = numext::maxi(compute_parallelism, pack_parallelism);
 
     num_threads_ = numext::mini<size_t>(num_threads_,
-                                    parallelism / MIN_JOBS_PER_THREAD);
+      static_cast<size_t>(parallelism / MIN_JOBS_PER_THREAD));
     num_threads_ = numext::maxi<size_t>(num_threads_, 1);
 
     // For optimal performance outer block sizes should be multiplies of kernel
