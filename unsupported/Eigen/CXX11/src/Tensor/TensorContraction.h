@@ -33,25 +33,32 @@ void pack_simple(Scalar * dst, const Scalar * src, Index cols, Index rows, Index
 
 template<typename LhsScalar, typename RhsScalar, typename Scalar, typename Index>
   struct libxsmm_wrapper {
-    libxsmm_wrapper() {}
     libxsmm_wrapper(int /*flags*/, Index /*m*/, Index /*n*/, Index /*k*/, Index /*lda*/, Index /*ldb*/, Index /*ldc*/,
         float/*Scalar alpha*/, float/*Scalar beta*/, int /*prefetch*/) {}
-    void operator()(const LhsScalar*, const RhsScalar*, Scalar*) {}
-    void operator()(const LhsScalar*, const RhsScalar*, Scalar*, const LhsScalar*, const RhsScalar*, const Scalar*) {}
+    void operator()(const LhsScalar*, const RhsScalar*, Scalar*) const { assert(0); }
+    void operator()(const LhsScalar*, const RhsScalar*, Scalar*, const LhsScalar*, const RhsScalar*, const Scalar*) const { assert(0); }
   };
 
 template<typename Index>
-  struct libxsmm_wrapper<float, float, float, Index>: public libxsmm_mmfunction<float> {
-    libxsmm_wrapper(): libxsmm_mmfunction() {}
+  struct libxsmm_wrapper<float, float, float, Index> {
+    libxsmm_mmfunction<float> m_function;
     libxsmm_wrapper(int flags, Index m, Index n, Index k, Index lda, Index ldb, Index ldc, float alpha, float beta, int prefetch) :
-        libxsmm_mmfunction(flags, m, n, k, lda, ldb, ldc, alpha, beta, prefetch) {}
+      m_function(flags, m, n, k, lda, ldb, ldc, alpha, beta, prefetch) {}
+    void operator()(const float* a, const float* b, float* c) const { m_function(a, b, c); }
+    void operator()(const float* a, const float* b, float* c, const float* pa, const float* pb, const float* pc) const {
+      m_function(a, b, c, pa, pb, pc);
+    }
   };
 
 template<typename Index>
-  struct libxsmm_wrapper<double, double, double, Index>: public libxsmm_mmfunction<double> {
-    libxsmm_wrapper(): libxsmm_mmfunction() {}
+  struct libxsmm_wrapper<double, double, double, Index> {
+    libxsmm_mmfunction<double> m_function;
     libxsmm_wrapper(int flags, Index m, Index n, Index k, Index lda, Index ldb, Index ldc, double alpha, double beta, int prefetch) :
-        libxsmm_mmfunction(flags, m, n, k, lda, ldb, ldc, alpha, beta, prefetch) {}
+      m_function(flags, m, n, k, lda, ldb, ldc, alpha, beta, prefetch) {}
+    void operator()(const double* a, const double* b, double* c) const { m_function(a, b, c); }
+    void operator()(const double* a, const double* b, double* c, const double* pa, const double* pb, const double* pc) const {
+      m_function(a, b, c, pa, pb, pc);
+    }
   };
 #endif
 
@@ -427,8 +434,8 @@ struct TensorContractionEvaluatorBase
     typedef TensorEvaluator<EvalRightArgType, Device> RightEvaluator;
     const Index lhs_packet_size = internal::unpacket_traits<typename LeftEvaluator::PacketReturnType>::size;
     const Index rhs_packet_size = internal::unpacket_traits<typename RightEvaluator::PacketReturnType>::size;
-    const int lhs_alignment = LeftEvaluator::IsAligned ? Aligned : Unaligned;
-    const int rhs_alignment = RightEvaluator::IsAligned ? Aligned : Unaligned;
+    const int lhs_alignment = (LeftEvaluator::IsAligned ? Aligned : Unaligned);
+    const int rhs_alignment = (RightEvaluator::IsAligned ? Aligned : Unaligned);
     typedef internal::TensorContractionInputMapper<LhsScalar, Index, internal::Lhs,
                                                    LeftEvaluator, left_nocontract_t,
                                                    contract_t, lhs_packet_size,
@@ -701,12 +708,8 @@ protected:
     // Use bigger stride to avoid hitting same cache line too often.
     // This consistently gives +~0.5 Gflops.
     const libxsmm_blasint stride_panelB = static_cast<libxsmm_blasint>(
-        kc % 32 == 0 ? kc + 16 : kc
+        (kc % 32) == 0 ? (kc + 16) : kc
     );
-
-    // Kernel for the general case (not edges)
-    typedef internal::libxsmm_wrapper<LhsScalar, RhsScalar, Scalar, Index> libxsmm_wrapper;
-    libxsmm_wrapper kernel;
 
     LhsScalar* blockA = NULL;
     RhsScalar* panelB = NULL;
@@ -718,9 +721,13 @@ protected:
       panelB = static_cast<RhsScalar*>(this->m_device.allocate(nc_outer * stride_panelB * sizeof(RhsScalar)));
     }
 
-    const Index kernel_stride_A = copyA ? stride_blockA : stride_A;
-    const Index kernel_stride_B = copyB ? stride_panelB : stride_B;
-    kernel = libxsmm_wrapper(0, mc, nc, kc, kernel_stride_A, kernel_stride_B, stride_C, 1, 1, blocking.prefetch());
+    const Index kernel_stride_A = (copyA ? stride_blockA : stride_A);
+    const Index kernel_stride_B = (copyB ? stride_panelB : stride_B);
+
+    // Kernel for the general case (not edges)
+    typedef internal::libxsmm_wrapper<LhsScalar, RhsScalar, Scalar, Index> libxsmm_wrapper;
+    const libxsmm_wrapper kernel = libxsmm_wrapper(0/*flags*/, mc, nc, kc, kernel_stride_A, kernel_stride_B, stride_C, 1, 1, blocking.prefetch());
+    assert(mc <= m && nc <= n && kc <= k);
 
     // Outer blocking
     for (Index ki_outer = 0; ki_outer < k; ki_outer += kc_outer) {
@@ -733,11 +740,15 @@ protected:
           // Inner blocking
           for (Index ki = ki_outer; ki < mini(ki_outer+kc_outer, k); ki += kc) {
             const Index actual_kc = mini(ki_outer+kc_outer, mini(ki+kc, k)) - ki;
-            const float beta = static_cast<float>(ki == 0 ? 0 : 1);
+            const float beta = static_cast<float>(0 != ki ? 1 : 0);
 
             if (copyB) {
               if (transposeB) {
+#if !defined(NDEBUG)
+                int result =
+#endif
                 libxsmm_otrans(panelB, rightData + ki*stride_B + ni_outer, sizeof(RhsScalar), actual_nc_outer, actual_kc, stride_B, stride_panelB);
+                assert(EXIT_SUCCESS == result);
               } else {
                 internal::pack_simple<RhsScalar, Index>(panelB, rightData + ni_outer*stride_B + ki, actual_nc_outer, actual_kc, stride_panelB, stride_B);
               }
@@ -746,17 +757,21 @@ protected:
             for (Index mi = mi_outer; mi < mini(mi_outer+mc_outer, m); mi += mc) {
               const Index actual_mc = mini(mi_outer+mc_outer, mini(mi+mc, m)) - mi;
 
-              const LhsScalar* a = transposeA ? leftData + mi*stride_A + ki :
-                                                leftData + ki*stride_A + mi;
+              const LhsScalar* a = (transposeA ? (leftData + mi*stride_A + ki) :
+                                                 (leftData + ki*stride_A + mi));
 
               if (copyA) {
                 if (transposeA) {
+#if !defined(NDEBUG)
+                  int result =
+#endif
                   libxsmm_otrans(blockA, a, sizeof(LhsScalar), actual_kc, actual_mc, stride_A, stride_blockA);
+                  assert(EXIT_SUCCESS == result);
                 } else {
                   internal::pack_simple<LhsScalar, Index>(blockA, a, actual_kc, actual_mc, stride_blockA, stride_A);
                 }
               }
-              const LhsScalar* actual_a = copyA ? blockA : a;
+              const LhsScalar* actual_a = (copyA ? blockA : a);
 
               for (Index ni = ni_outer; ni < mini(ni_outer+nc_outer, n); ni += nc) {
                 const Index actual_nc = mini(ni_outer+nc_outer, mini(ni+nc, n)) - ni;
@@ -765,15 +780,17 @@ protected:
                 Scalar* c = buffer + ni*stride_C + mi;
                 const Scalar* cp = c + nc*stride_C;
 
-                const RhsScalar* actual_b = copyB ? panelB + (ni-ni_outer)*stride_panelB : b;
-                const RhsScalar* bp = copyB ? panelB + nc*stride_panelB : b + nc*stride_B;
+                const RhsScalar* actual_b = (copyB ? (panelB + (ni-ni_outer)*stride_panelB) : b);
+                const RhsScalar* bp = (copyB ? (panelB + nc*stride_panelB) : (b + nc*stride_B));
 
                 if (actual_mc == mc && actual_kc == kc && actual_nc == nc && beta == 1) {
                   // Most used, cached kernel.
                   kernel(actual_a, actual_b, c, actual_a, bp, cp);
                 } else {
+                  assert(actual_mc <= m && actual_nc <= n && actual_kc <= k);
                   // Edges - use libxsmm kernel cache.
-                  libxsmm_wrapper(0, actual_mc, actual_nc, actual_kc, kernel_stride_A, kernel_stride_B, stride_C, 1, beta, blocking.prefetch())(actual_a, actual_b, c, actual_a, bp, cp);
+                  libxsmm_wrapper(0/*flags*/, actual_mc, actual_nc, actual_kc, kernel_stride_A, kernel_stride_B, stride_C, 1, beta, blocking.prefetch())(
+                    actual_a, actual_b, c, actual_a, bp, cp);
                 }
               }
             }
