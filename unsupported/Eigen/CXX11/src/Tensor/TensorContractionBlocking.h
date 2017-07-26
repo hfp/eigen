@@ -86,17 +86,12 @@ class TensorXsmmContractionBlocking {
       outer_m_ = m; outer_k_ = k; outer_n_ = n;
       copyA_ = false; copyB_ = false;
     } else {
-      int arch = libxsmm_cpuid_x86();
+      const int arch = libxsmm_cpuid_x86();
 
       if (arch == LIBXSMM_X86_AVX512_CORE) {
         // skylake
         mc_ = 64; kc_ = 64; nc_ = 24;
         outer_m_ = 512; outer_k_ = 512; outer_n_ = 24*22;
-        // Hack to use this kernel architecture as the other one has performance
-        // issues (no hardware prefetching).
-        // TODO(nishantpatil): This should be removed if the issues are fixed,
-        // or this one becomes the default.
-        setenv("LIBXSMM_AVX512_CLASSIC_GEMM", "1", 1);
       } else if (arch == LIBXSMM_X86_AVX2) {
         // haswell
         mc_ = 32; kc_ = 192; nc_ = 33;
