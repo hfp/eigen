@@ -43,7 +43,7 @@ template<typename Index>
   struct libxsmm_wrapper<float, float, float, Index> {
     libxsmm_mmfunction<float> m_function;
     libxsmm_wrapper(int flags, Index m, Index n, Index k, Index lda, Index ldb, Index ldc, float alpha, float beta, int prefetch) :
-      m_function(flags, m, n, k, lda, ldb, ldc, alpha, beta, prefetch) {}
+      m_function(flags, m, n, k, lda, ldb, ldc, alpha, beta, prefetch) { assert(0 != m_function); }
     void operator()(const float* a, const float* b, float* c) const { m_function(a, b, c); }
     void operator()(const float* a, const float* b, float* c, const float* pa, const float* pb, const float* pc) const {
       m_function(a, b, c, pa, pb, pc);
@@ -54,7 +54,7 @@ template<typename Index>
   struct libxsmm_wrapper<double, double, double, Index> {
     libxsmm_mmfunction<double> m_function;
     libxsmm_wrapper(int flags, Index m, Index n, Index k, Index lda, Index ldb, Index ldc, double alpha, double beta, int prefetch) :
-      m_function(flags, m, n, k, lda, ldb, ldc, alpha, beta, prefetch) {}
+      m_function(flags, m, n, k, lda, ldb, ldc, alpha, beta, prefetch) { assert(0 != m_function); }
     void operator()(const double* a, const double* b, double* c) const { m_function(a, b, c); }
     void operator()(const double* a, const double* b, double* c, const double* pa, const double* pb, const double* pc) const {
       m_function(a, b, c, pa, pb, pc);
