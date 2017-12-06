@@ -155,7 +155,7 @@ class TensorXsmmContractionBlocking {
   EIGEN_ALWAYS_INLINE bool copyB() const { return copyB_; }
   EIGEN_ALWAYS_INLINE bool transposeA() const { return transposeA_; }
   EIGEN_ALWAYS_INLINE bool transposeB() const { return transposeB_; }
-  EIGEN_ALWAYS_INLINE int num_threads() const { return num_threads_; }
+  EIGEN_ALWAYS_INLINE int num_threads() const { return static_cast<int>(num_threads_); }
   EIGEN_ALWAYS_INLINE Index blocks_m() const { return divup(m_, mc_); }
   EIGEN_ALWAYS_INLINE Index blocks_k() const { return divup(k_, kc_); }
   EIGEN_ALWAYS_INLINE Index blocks_n() const { return divup(n_, nc_); }

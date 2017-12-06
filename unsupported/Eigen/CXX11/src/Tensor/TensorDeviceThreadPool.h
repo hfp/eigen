@@ -177,7 +177,7 @@ struct ThreadPoolDevice {
                    std::function<void(Index, Index)> f) const {
     typedef TensorCostModel<ThreadPoolDevice> CostModel;
     if (n <= 1 || numThreads() == 1 ||
-        CostModel::numThreads(n, cost, static_cast<int>(numThreads())) == 1) {
+        CostModel::numThreads(static_cast<double>(n), cost, numThreads()) == 1) {
       f(0, n);
       return;
     }
@@ -189,9 +189,9 @@ struct ThreadPoolDevice {
     // of blocks to be evenly dividable across threads.
 
     double block_size_f = 1.0 / CostModel::taskSize(1, cost);
-    Index block_size = numext::mini(n, numext::maxi<Index>(1, block_size_f));
+    Index block_size = numext::mini(n, numext::maxi<Index>(1, static_cast<Index>(block_size_f)));
     const Index max_block_size =
-        numext::mini(n, numext::maxi<Index>(1, 2 * block_size_f));
+        numext::mini(n, numext::maxi<Index>(1, 2 * static_cast<Index>(block_size_f)));
     if (block_align) {
       Index new_block_size = block_align(block_size);
       eigen_assert(new_block_size >= block_size);

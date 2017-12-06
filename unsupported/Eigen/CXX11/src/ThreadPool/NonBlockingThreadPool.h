@@ -239,10 +239,10 @@ class NonBlockingThreadPoolTempl : public Eigen::ThreadPoolInterface {
   Task Steal() {
     PerThread* pt = GetPerThread();
     const size_t size = queues_.size();
-    unsigned r = Rand(&pt->rand);
-    unsigned inc = coprimes_[r % coprimes_.size()];
-    unsigned victim = r % size;
-    for (unsigned i = 0; i < size; i++) {
+    const size_t r = Rand(&pt->rand);
+    const size_t inc = coprimes_[r % coprimes_.size()];
+    size_t victim = r % size;
+    for (size_t i = 0; i < size; i++) {
       Task t = queues_[victim]->PopBack();
       if (t.f) {
         return t;
@@ -278,7 +278,7 @@ class NonBlockingThreadPoolTempl : public Eigen::ThreadPoolInterface {
     // If we are shutting down and all worker threads blocked without work,
     // that's we are done.
     blocked_++;
-    if (done_ && blocked_ == num_threads_) {
+    if (done_ && blocked_ == static_cast<unsigned int>(num_threads_)) {
       ec_.CancelWait(waiter);
       // Almost done, but need to re-check queues.
       // Consider that all queues are empty and all worker threads are preempted
@@ -307,12 +307,12 @@ class NonBlockingThreadPoolTempl : public Eigen::ThreadPoolInterface {
   int NonEmptyQueueIndex() {
     PerThread* pt = GetPerThread();
     const size_t size = queues_.size();
-    unsigned r = Rand(&pt->rand);
-    unsigned inc = coprimes_[r % coprimes_.size()];
-    unsigned victim = r % size;
+    const size_t r = Rand(&pt->rand);
+    const size_t inc = coprimes_[r % coprimes_.size()];
+    size_t victim = r % size;
     for (unsigned i = 0; i < size; i++) {
       if (!queues_[victim]->Empty()) {
-        return victim;
+        return static_cast<int>(victim);
       }
       victim += inc;
       if (victim >= size) {

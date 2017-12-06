@@ -1163,7 +1163,7 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
 
           // Memory may not be zeroed, overwrite instead of adding in first
           // iteration.
-          float beta = ki == 0 ? 0 : 1;
+          const float beta = (ki == 0 ? 0.f : 1.f);
 
           Scalar * current_c = buffer + (mi*bm) + (ni*bn)*stride_c;
           internal::libxsmm_wrapper<LhsScalar, RhsScalar, Scalar, Index>(
