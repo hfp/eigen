@@ -121,7 +121,7 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
     const Index k = this->m_k_size;
     if (m == 0 || n == 0 || k == 0) return;
 
-#if defined(EIGEN_VECTORIZE_AVX) && defined(EIGEN_USE_LIBXSMM)
+#if defined(EIGEN_USE_LIBXSMM)
     if (this->m_can_use_xsmm) {
       bool transposeA = !this->m_lhs_inner_dim_contiguous;
       bool transposeB = !this->m_rhs_inner_dim_contiguous;
@@ -1064,7 +1064,7 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
     return cost + lhsCost + rhsCost;
   }
 
-#if defined(EIGEN_VECTORIZE_AVX) && defined(EIGEN_USE_LIBXSMM)
+#if defined(EIGEN_USE_LIBXSMM)
   template<int Alignment>
   class ContextXsmm {
    public:

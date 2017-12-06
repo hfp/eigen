@@ -20,7 +20,7 @@ namespace Eigen {
   *
   */
 namespace internal {
-#if defined(EIGEN_VECTORIZE_AVX) && defined(EIGEN_USE_LIBXSMM)
+#if defined(EIGEN_USE_LIBXSMM)
 template<typename Scalar, typename Index>
 void pack_simple(Scalar * dst, const Scalar * src, Index cols, Index rows, Index lddst, Index ldsrc) {
   const int prefetch = 1;
@@ -468,12 +468,12 @@ struct TensorContractionEvaluatorBase
 
   template <bool lhs_inner_dim_contiguous, bool rhs_inner_dim_contiguous, bool rhs_inner_dim_reordered, int Alignment>
   EIGEN_DEVICE_FUNC void evalGemm(Scalar* buffer) const {
-    #if defined(EIGEN_VECTORIZE_AVX) && defined(EIGEN_USE_LIBXSMM)
+#if defined(EIGEN_USE_LIBXSMM)
     if (m_can_use_xsmm) {
       evalGemmXSMM(buffer);
       return;
     }
-    #endif
+#endif
 
     // columns in left side, rows in right side
     const Index k = this->m_k_size;
@@ -595,7 +595,7 @@ protected:
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void EnableXSMMIfPossible(const array<IndexPair<Index>, ContractDims>& eval_op_indices) {
     m_can_use_xsmm = false;
 
-#if defined(EIGEN_VECTORIZE_AVX) && defined(EIGEN_USE_LIBXSMM)
+#if defined(EIGEN_USE_LIBXSMM)
     typedef typename internal::remove_const<typename EvalLeftArgType::Scalar>::type LhsScalar;
     typedef typename internal::remove_const<typename EvalRightArgType::Scalar>::type RhsScalar;
     if (!std::is_same<Scalar, LhsScalar>::value ||
@@ -667,7 +667,7 @@ protected:
 #endif
   }
 
-#if defined(EIGEN_VECTORIZE_AVX) && defined(EIGEN_USE_LIBXSMM)
+#if defined(EIGEN_USE_LIBXSMM)
   EIGEN_DEVICE_FUNC void evalGemmXSMM(Scalar* buffer) const {
     // columns in left side, rows in right side
     const Index k = this->m_k_size;
