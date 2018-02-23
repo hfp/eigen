@@ -116,7 +116,7 @@ class TensorXsmmContractionBlocking {
     copyB_ = copyB_ || transposeB;
 
     // See libxsmm_gemm_prefetch_type definition in libxsmm_typedefs.h
-    prefetch_ = LIBXSMM_GEMM_PREFETCH_AL2CL2BL2_VIA_C;
+    prefetch_ = LIBXSMM_GEMM_PREFETCH_AL2BL2_VIA_C;
 
 #endif
 
