@@ -371,6 +371,21 @@ void check_indexed_view()
   a(X) = 1;
   A(X,Y) = 1;
 
+  // Check compilation of varying integer types as index types:
+  Index i = n/2;
+  short i_short(i);
+  std::size_t i_sizet(i);
+  VERIFY_IS_EQUAL( a(i), a.coeff(i_short) );
+  VERIFY_IS_EQUAL( a(i), a.coeff(i_sizet) );
+
+  VERIFY_IS_EQUAL( A(i,i), A.coeff(i_short, i_short) );
+  VERIFY_IS_EQUAL( A(i,i), A.coeff(i_short, i) );
+  VERIFY_IS_EQUAL( A(i,i), A.coeff(i, i_short) );
+  VERIFY_IS_EQUAL( A(i,i), A.coeff(i, i_sizet) );
+  VERIFY_IS_EQUAL( A(i,i), A.coeff(i_sizet, i) );
+  VERIFY_IS_EQUAL( A(i,i), A.coeff(i_sizet, i_short) );
+  VERIFY_IS_EQUAL( A(i,i), A.coeff(5, i_sizet) );
+
 }
 
 void test_indexed_view()
@@ -380,4 +395,19 @@ void test_indexed_view()
     CALL_SUBTEST_2( check_indexed_view() );
     CALL_SUBTEST_3( check_indexed_view() );
 //   }
+
+  // static checks of some internals:
+
+  #define STATIC_CHECK( COND ) \
+    EIGEN_STATIC_ASSERT( (COND) , EIGEN_INTERNAL_ERROR_PLEASE_FILE_A_BUG_REPORT )
+
+  STATIC_CHECK(( internal::is_valid_index_type<int>::value ));
+  STATIC_CHECK(( internal::is_valid_index_type<unsigned int>::value ));
+  STATIC_CHECK(( internal::is_valid_index_type<short>::value ));
+  STATIC_CHECK(( internal::is_valid_index_type<std::ptrdiff_t>::value ));
+  STATIC_CHECK(( internal::is_valid_index_type<std::size_t>::value ));
+  STATIC_CHECK(( !internal::valid_indexed_view_overload<int,int>::value ));
+  STATIC_CHECK(( !internal::valid_indexed_view_overload<int,std::ptrdiff_t>::value ));
+  STATIC_CHECK(( !internal::valid_indexed_view_overload<std::ptrdiff_t,int>::value ));
+  STATIC_CHECK(( !internal::valid_indexed_view_overload<std::size_t,int>::value ));
 }
