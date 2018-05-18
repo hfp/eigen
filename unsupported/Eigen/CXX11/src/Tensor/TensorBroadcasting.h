@@ -239,6 +239,15 @@ struct TensorEvaluator<const TensorBroadcastingOp<Broadcast, ArgType>, Device>
     if (static_cast<int>(Layout) == static_cast<int>(ColMajor)) {
       return packetColMajor<LoadMode>(index);
     } else {
+      if (NumDims == 2 &&
+          ((m_impl.dimensions()[0] == 1 && m_broadcast[1] == 1) ||
+          (m_impl.dimensions()[1] == 1 && m_broadcast[0] == 1))) {
+        return packetRowMajor1DTo2D<LoadMode>(index);
+      }
+      if (NumDims == 3 &&
+          (m_impl.dimensions()[2] == 1 && m_broadcast[0] == 1 && m_broadcast[1] == 1)) {
+        return packetRowMajor2DTo3D<LoadMode>(index);
+      }
       return packetRowMajor<LoadMode>(index);
     }
   }
@@ -298,6 +307,78 @@ struct TensorEvaluator<const TensorBroadcastingOp<Broadcast, ArgType>, Device>
   }
 
   template<int LoadMode>
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE PacketReturnType packetRowMajor2DTo3D(Index index) const
+  {
+    EIGEN_STATIC_ASSERT((PacketSize > 1), YOU_MADE_A_PROGRAMMING_MISTAKE)
+    eigen_assert(index+PacketSize-1 < dimensions().TotalSize());
+
+    EIGEN_ALIGN_MAX typename internal::remove_const<CoeffReturnType>::type values[PacketSize];
+    Index inputIndex;
+    // Column vector to Matrix
+    inputIndex = index / m_outputStrides[1];
+    Index outputRowOffset = index % m_outputStrides[1];
+    if (outputRowOffset + PacketSize <= m_outputStrides[1]) {
+      values[0] = m_impl.coeff(inputIndex);
+      return internal::pload1<PacketReturnType>(values);
+    } else {
+      for (int i = 0, cur = 0; i < PacketSize; ++i, ++cur) {
+        if (outputRowOffset + cur < m_outputStrides[1]) {
+          values[i] = m_impl.coeff(inputIndex);
+        } else {
+          values[i] = m_impl.coeff(++inputIndex);
+          outputRowOffset = 0;
+          cur = 0;
+        }
+      }
+      return internal::pload<PacketReturnType>(values);
+    }
+  }
+
+  template<int LoadMode>
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE PacketReturnType packetRowMajor1DTo2D(Index index) const
+  {
+    EIGEN_STATIC_ASSERT((PacketSize > 1), YOU_MADE_A_PROGRAMMING_MISTAKE)
+    eigen_assert(index+PacketSize-1 < dimensions().TotalSize());
+
+    EIGEN_ALIGN_MAX typename internal::remove_const<CoeffReturnType>::type values[PacketSize];
+    Index inputIndex;
+    if (m_impl.dimensions()[0] == 1) {
+      // Row vector to Matrix
+      inputIndex = index % m_inputStrides[0];
+      if (inputIndex + PacketSize <= m_impl.dimensions()[1]) {
+        return m_impl.template packet<Unaligned>(inputIndex);
+      } else {
+        for (int i = 0; i < PacketSize; ++i) {
+          if (inputIndex > m_impl.dimensions()[1]-1) {
+            inputIndex = 0;
+          }
+          values[i] = m_impl.coeff(inputIndex++);
+        }
+        return internal::pload<PacketReturnType>(values);
+      }
+    } else {
+      // Column vector to Matrix
+      inputIndex = index / m_outputStrides[0];
+      Index outputRowOffset = index % m_outputStrides[0];
+      if (outputRowOffset + PacketSize <= m_outputStrides[0]) {
+        values[0] = m_impl.coeff(inputIndex);
+        return internal::pload1<PacketReturnType>(values);
+      } else {
+        for (int i = 0, cur = 0; i < PacketSize; ++i, ++cur) {
+          if (outputRowOffset + cur < m_outputStrides[0]) {
+            values[i] = m_impl.coeff(inputIndex);
+          } else {
+            values[i] = m_impl.coeff(++inputIndex);
+            outputRowOffset = 0;
+            cur = 0;
+          }
+        }
+        return internal::pload<PacketReturnType>(values);
+      }
+    }
+  }
+
+  template<int LoadMode>
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE PacketReturnType packetRowMajor(Index index) const
   {
     EIGEN_STATIC_ASSERT((PacketSize > 1), YOU_MADE_A_PROGRAMMING_MISTAKE)
@@ -341,6 +422,32 @@ struct TensorEvaluator<const TensorBroadcastingOp<Broadcast, ArgType>, Device>
     } else {
       EIGEN_ALIGN_MAX typename internal::remove_const<CoeffReturnType>::type values[PacketSize];
       values[0] = m_impl.coeff(inputIndex);
+      if (m_impl.dimensions()[0] == 1 && NumDims == 2) {
+        Index loc = 0;
+        for (int i = 1; i < PacketSize; ++i) {
+          if (innermostLoc + i <= m_impl.dimensions()[1]-1) {
+            values[i] = m_impl.coeff(inputIndex+i);
+          } else {
+            values[i] = m_impl.coeff(loc%m_impl.dimensions()[1]);
+            loc++;
+          }
+        }
+      } else if (m_impl.dimensions()[1] == 1 && NumDims == 2) {
+        Index tmp  = originalIndex % m_outputStrides[0];
+        Index tmp2 = originalIndex/m_outputStrides[0];
+        for (int i = 1; i < PacketSize; ++i) {
+          if (tmp + i < m_outputStrides[0]) { 
+            values[i] = values[0];
+          } else {
+            Index n_strides = (originalIndex + i)/m_outputStrides[0] - tmp2;
+            values[i] = m_impl.coeff((inputIndex+n_strides)%m_impl.dimensions()[0]);
+          }
+        }
+      } else {
+        for (int i = 1; i < PacketSize; ++i) {
+          values[i] = coeffRowMajor(originalIndex+i);
+        }
+      }
       for (int i = 1; i < PacketSize; ++i) {
         values[i] = coeffRowMajor(originalIndex+i);
       }
