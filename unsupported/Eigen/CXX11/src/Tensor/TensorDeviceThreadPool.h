@@ -261,6 +261,9 @@ struct ThreadPoolDevice {
     parallelFor(n, cost, nullptr, std::move(f));
   }
 
+  // Thread pool accessor.
+  ThreadPoolInterface* getPool() const { return pool_; }
+
  private:
   ThreadPoolInterface* pool_;
   int num_threads_;
