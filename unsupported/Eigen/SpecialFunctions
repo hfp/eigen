@@ -34,8 +34,6 @@ namespace Eigen {
   * - polygamma
   * - zeta
   * - betainc
-  * - i0e
-  * - i1e
   *
   * \code
   * #include <unsupported/Eigen/SpecialFunctions>
