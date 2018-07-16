@@ -108,7 +108,7 @@ macro(ei_add_test_internal testname testname_with_suffix)
 
   add_test(${testname_with_suffix} "${targetname}")
 
-  # Specify target and test labels accoirding to EIGEN_CURRENT_SUBPROJECT
+  # Specify target and test labels according to EIGEN_CURRENT_SUBPROJECT
   get_property(current_subproject GLOBAL PROPERTY EIGEN_CURRENT_SUBPROJECT)
   if ((current_subproject) AND (NOT (current_subproject STREQUAL "")))
     set_property(TARGET ${targetname} PROPERTY LABELS "Build${current_subproject}")
@@ -276,26 +276,28 @@ macro(ei_add_test testname)
   endif()
 
   file(READ "${filename}" test_source)
-  set(parts 0)
   string(REGEX MATCHALL "CALL_SUBTEST_[0-9]+|EIGEN_TEST_PART_[0-9]+|EIGEN_SUFFIXES(;[0-9]+)+"
          occurrences "${test_source}")
   string(REGEX REPLACE "CALL_SUBTEST_|EIGEN_TEST_PART_|EIGEN_SUFFIXES" "" suffixes "${occurrences}")
   list(REMOVE_DUPLICATES suffixes)
-  if(EIGEN_SPLIT_LARGE_TESTS AND suffixes)
+  set(explicit_suffixes "")
+  if( (NOT EIGEN_SPLIT_LARGE_TESTS) AND suffixes)
+    # Check whether we have EIGEN_TEST_PART_* statements, in which case we likely must enforce splitting.
+    # For instance, indexed_view activate a different c++ version for each part.
+    string(REGEX MATCHALL "EIGEN_TEST_PART_[0-9]+" occurrences "${test_source}")
+    string(REGEX REPLACE "EIGEN_TEST_PART_" "" explicit_suffixes "${occurrences}")
+    list(REMOVE_DUPLICATES explicit_suffixes)
+  endif()
+  if( (EIGEN_SPLIT_LARGE_TESTS AND suffixes) OR explicit_suffixes)
     add_custom_target(${testname})
     foreach(suffix ${suffixes})
       ei_add_test_internal(${testname} ${testname}_${suffix}
         "${ARGV1} -DEIGEN_TEST_PART_${suffix}=1" "${ARGV2}")
       add_dependencies(${testname} ${testname}_${suffix})
     endforeach(suffix)
-  else(EIGEN_SPLIT_LARGE_TESTS AND suffixes)
-    set(symbols_to_enable_all_parts "")
-    foreach(suffix ${suffixes})
-      set(symbols_to_enable_all_parts
-        "${symbols_to_enable_all_parts} -DEIGEN_TEST_PART_${suffix}=1")
-    endforeach(suffix)
-    ei_add_test_internal(${testname} ${testname} "${ARGV1} ${symbols_to_enable_all_parts}" "${ARGV2}")
-  endif(EIGEN_SPLIT_LARGE_TESTS AND suffixes)
+  else()
+    ei_add_test_internal(${testname} ${testname} "${ARGV1} -DEIGEN_TEST_PART_ALL=1" "${ARGV2}")
+  endif()
 endmacro(ei_add_test)
 
 macro(ei_add_test_sycl testname)
