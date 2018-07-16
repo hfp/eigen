@@ -39,7 +39,7 @@ template<typename LhsScalar, typename RhsScalar, typename Scalar, typename Index
     void operator()(const LhsScalar*, const RhsScalar*, Scalar*, const LhsScalar*, const RhsScalar*, const Scalar*) const { assert(0); }
   };
 
-template<typename Index>
+  template<typename Index>
   struct libxsmm_wrapper<float, float, float, Index> {
     libxsmm_mmfunction<float> m_function;
     libxsmm_wrapper(int flags, Index m, Index n, Index k, Index lda, Index ldb, Index ldc, float alpha, float beta, int prefetch) :
@@ -50,7 +50,7 @@ template<typename Index>
     }
   };
 
-template<typename Index>
+  template<typename Index>
   struct libxsmm_wrapper<double, double, double, Index> {
     libxsmm_mmfunction<double> m_function;
     libxsmm_wrapper(int flags, Index m, Index n, Index k, Index lda, Index ldb, Index ldc, double alpha, double beta, int prefetch) :
@@ -426,7 +426,10 @@ struct TensorContractionEvaluatorBase
   }
 
   template <bool lhs_inner_dim_contiguous, bool rhs_inner_dim_contiguous, bool rhs_inner_dim_reordered, int Alignment>
-  EIGEN_DEVICE_FUNC void evalGemv(Scalar* buffer) const {
+  #if !defined(EIGEN_HIPCC)
+  EIGEN_DEVICE_FUNC
+  #endif
+  void evalGemv(Scalar* buffer) const {
     const Index rows = m_i_size;
     const Index cols = m_k_size;
 
@@ -467,13 +470,16 @@ struct TensorContractionEvaluatorBase
   }
 
   template <bool lhs_inner_dim_contiguous, bool rhs_inner_dim_contiguous, bool rhs_inner_dim_reordered, int Alignment>
-  EIGEN_DEVICE_FUNC void evalGemm(Scalar* buffer) const {
-#if defined(EIGEN_USE_LIBXSMM)
+  #if !defined(EIGEN_HIPCC)
+  EIGEN_DEVICE_FUNC
+  #endif
+  void evalGemm(Scalar* buffer) const {
+    #if defined(EIGEN_USE_LIBXSMM)
     if (m_can_use_xsmm) {
       evalGemmXSMM(buffer);
       return;
     }
-#endif
+    #endif
 
     // columns in left side, rows in right side
     const Index k = this->m_k_size;
