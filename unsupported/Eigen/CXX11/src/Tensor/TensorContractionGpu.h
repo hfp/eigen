@@ -505,9 +505,9 @@ template<typename Scalar, typename Index, typename LhsMapper,
 __global__ void
 #if defined(EIGEN_HIPCC)
 __launch_bounds__(512, 1)
-#else  
+#else
 __launch_bounds__(512)
-#endif  
+#endif
 EigenContractionKernel(const LhsMapper lhs, const RhsMapper rhs,
                        const OutputMapper output,
                        const Index m_size, const Index n_size, const Index k_size) {
@@ -698,7 +698,7 @@ EigenFloatContractionKernelInternal16x16(const LhsMapper lhs, const RhsMapper rh
 
 #undef prefetch_lhs
 #undef add_vals
-  
+
   Index horiz_base = threadIdx.y*4+base_n;
   if (!CHECK_LHS_BOUNDARY && !CHECK_RHS_BOUNDARY) {
     for (int i = 0; i < 4; i++) {
@@ -1137,7 +1137,7 @@ template<typename Index, typename LhsMapper,
 __global__ void
 #if defined(EIGEN_HIPCC)
 __launch_bounds__(256, 1)
-#else  
+#else
 __launch_bounds__(256)
 #endif
 EigenFloatContractionKernel(const LhsMapper lhs, const RhsMapper rhs,
@@ -1184,7 +1184,7 @@ template<typename Index, typename LhsMapper,
 __global__ void
 #if defined(EIGEN_HIPCC)
 __launch_bounds__(256, 1)
-#else  
+#else
 __launch_bounds__(256)
 #endif
 EigenFloatContractionKernel16x16(const LhsMapper lhs, const RhsMapper rhs,
@@ -1215,16 +1215,16 @@ EigenFloatContractionKernel16x16(const LhsMapper lhs, const RhsMapper rhs,
 }
 
 
-template<typename Indices, typename LeftArgType, typename RightArgType>
-struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgType>, GpuDevice> :
-    public TensorContractionEvaluatorBase<TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgType>, GpuDevice> > {
+template<typename Indices, typename LeftArgType, typename RightArgType, typename OutputKernelType>
+struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgType, OutputKernelType>, GpuDevice> :
+    public TensorContractionEvaluatorBase<TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgType, OutputKernelType>, GpuDevice> > {
 
   typedef GpuDevice Device;
 
-  typedef TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgType>, Device> Self;
+  typedef TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgType, OutputKernelType>, Device> Self;
   typedef TensorContractionEvaluatorBase<Self> Base;
 
-  typedef TensorContractionOp<Indices, LeftArgType, RightArgType> XprType;
+  typedef TensorContractionOp<Indices, LeftArgType, RightArgType, OutputKernelType> XprType;
   typedef typename internal::remove_const<typename XprType::Scalar>::type Scalar;
   typedef typename XprType::Index Index;
   typedef typename XprType::CoeffReturnType CoeffReturnType;
