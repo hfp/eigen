@@ -160,7 +160,7 @@ struct NoOpOutputKernel {
       Index num_cols) const {}
 };
 
-template<typename Indices, typename LhsXprType, typename RhsXprType, typename OutputKernelType>
+template<typename Indices, typename LhsXprType, typename RhsXprType, typename OutputKernelType = const NoOpOutputKernel>
 class TensorContractionOp : public TensorBase<TensorContractionOp<Indices, LhsXprType, RhsXprType, OutputKernelType>, ReadOnlyAccessors>
 {
   public:
