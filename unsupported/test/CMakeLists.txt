@@ -130,6 +130,7 @@ if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 ei_add_test(cxx11_tensor_dimension)
 ei_add_test(cxx11_tensor_map)
 ei_add_test(cxx11_tensor_assign)
+ei_add_test(cxx11_tensor_block_access)
 ei_add_test(cxx11_tensor_comparisons)
 ei_add_test(cxx11_tensor_forced_eval)
 ei_add_test(cxx11_tensor_math)
@@ -141,10 +142,6 @@ ei_add_test(cxx11_tensor_sugar)
 ei_add_test(cxx11_tensor_roundings)
 ei_add_test(cxx11_tensor_layout_swap)
 ei_add_test(cxx11_tensor_io)
-if("${CMAKE_SIZEOF_VOID_P}" EQUAL "8")
-  # This test requires __uint128_t which is only available on 64bit systems
-  ei_add_test(cxx11_tensor_uint128)
-endif()
 endif()
 
 if(EIGEN_TEST_CXX11)
@@ -226,6 +223,10 @@ if(EIGEN_TEST_CXX11)
   ei_add_test(cxx11_tensor_scan)
   ei_add_test(cxx11_tensor_trace)
   ei_add_test(cxx11_tensor_move)
+if("${CMAKE_SIZEOF_VOID_P}" EQUAL "8" AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+  # This test requires __uint128_t which is only available on 64bit systems
+  ei_add_test(cxx11_tensor_uint128)
+endif()
 
 endif()
 
@@ -291,14 +292,14 @@ if(CUDA_FOUND AND EIGEN_TEST_CUDA)
   unset(EIGEN_ADD_TEST_FILENAME_EXTENSION)
 endif()
 
-# Add HIP specific tests 
+# Add HIP specific tests
 if (EIGEN_TEST_HIP)
 
   set(HIP_PATH "/opt/rocm/hip" CACHE STRING "Path to the HIP installation.")
 
   if (EXISTS ${HIP_PATH})
-    
-    list(APPEND CMAKE_MODULE_PATH ${HIP_PATH}/cmake) 
+
+    list(APPEND CMAKE_MODULE_PATH ${HIP_PATH}/cmake)
 
     find_package(HIP REQUIRED)
     if (HIP_FOUND)
@@ -328,22 +329,22 @@ if (EIGEN_TEST_HIP)
 	ei_add_test(cxx11_tensor_contract_gpu)
 	ei_add_test(cxx11_tensor_of_float16_gpu)
 	ei_add_test(cxx11_tensor_random_gpu)
-	
+
 	unset(EIGEN_ADD_TEST_FILENAME_EXTENSION)
-	
+
       elseif (${HIP_PLATFORM} STREQUAL "nvcc")
 	message(FATAL_ERROR "HIP_PLATFORM = nvcc is not supported within Eigen")
       else ()
 	message(FATAL_ERROR "Unknown HIP_PLATFORM = ${HIP_PLATFORM}")
       endif()
-      
+
     endif(HIP_FOUND)
 
   else ()
 
     message(FATAL_ERROR "EIGEN_TEST_HIP is ON, but the specified HIP_PATH (${HIP_PATH}) does not exist")
-    
+
   endif()
-    
+
 endif(EIGEN_TEST_HIP)
 
