@@ -24,11 +24,7 @@ namespace internal {
 template<typename Scalar, typename Index>
 void pack_simple(Scalar * dst, const Scalar * src, Index cols, Index rows, Index lddst, Index ldsrc) {
   const int prefetch = 1;
-#if !defined(NDEBUG)
-  int result =
-#endif
   libxsmm_matcopy(dst, src, sizeof(Scalar), rows, cols, ldsrc, lddst, &prefetch);
-  assert(EXIT_SUCCESS == result);
 }
 
 template<typename LhsScalar, typename RhsScalar, typename Scalar, typename Index>
@@ -841,11 +837,7 @@ protected:
 
             if (copyB) {
               if (transposeB) {
-#if !defined(NDEBUG)
-                int result =
-#endif
                 libxsmm_otrans(panelB, rightData + ki*stride_B + ni_outer, sizeof(RhsScalar), actual_nc_outer, actual_kc, stride_B, stride_panelB);
-                assert(EXIT_SUCCESS == result);
               } else {
                 internal::pack_simple<RhsScalar, Index>(panelB, rightData + ni_outer*stride_B + ki, actual_nc_outer, actual_kc, stride_panelB, stride_B);
               }
@@ -859,11 +851,7 @@ protected:
 
               if (copyA) {
                 if (transposeA) {
-#if !defined(NDEBUG)
-                  int result =
-#endif
                   libxsmm_otrans(blockA, a, sizeof(LhsScalar), actual_kc, actual_mc, stride_A, stride_blockA);
-                  assert(EXIT_SUCCESS == result);
                 } else {
                   internal::pack_simple<LhsScalar, Index>(blockA, a, actual_kc, actual_mc, stride_blockA, stride_A);
                 }
