@@ -213,7 +213,7 @@ struct TensorContractionEvaluatorBase
 
   enum {
     IsAligned = true,
-    PacketAccess = (internal::unpacket_traits<PacketReturnType>::size > 1),
+    PacketAccess = (PacketType<CoeffReturnType, Device>::size > 1),
     BlockAccess = false,
     Layout = TensorEvaluator<LeftArgType, Device>::Layout,
     CoordAccess = false,  // to be implemented
@@ -248,8 +248,8 @@ struct TensorContractionEvaluatorBase
                           op.lhsExpression(), op.rhsExpression()), device),
     m_rightImpl(choose(Cond<static_cast<int>(Layout) == static_cast<int>(ColMajor)>(),
                           op.rhsExpression(), op.lhsExpression()), device),
-        m_output_kernel(op.outputKernel()),
         m_device(device),
+        m_output_kernel(op.outputKernel()),
         m_result(NULL) {
     EIGEN_STATIC_ASSERT((static_cast<int>(TensorEvaluator<LeftArgType, Device>::Layout) ==
          static_cast<int>(TensorEvaluator<RightArgType, Device>::Layout)),

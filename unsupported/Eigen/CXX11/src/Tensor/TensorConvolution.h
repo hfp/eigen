@@ -302,7 +302,7 @@ struct TensorEvaluator<const TensorConvolutionOp<Indices, InputArgType, KernelAr
   typedef typename XprType::Scalar Scalar;
   typedef typename XprType::CoeffReturnType CoeffReturnType;
   typedef typename PacketType<CoeffReturnType, Device>::type PacketReturnType;
-  static const int PacketSize = internal::unpacket_traits<PacketReturnType>::size;
+  static const int PacketSize = PacketType<CoeffReturnType, Device>::size;
 
   enum {
     IsAligned = TensorEvaluator<InputArgType, Device>::IsAligned & TensorEvaluator<KernelArgType, Device>::IsAligned,
@@ -527,8 +527,8 @@ struct TensorEvaluator<const TensorConvolutionOp<Indices, InputArgType, KernelAr
       Scalar* local = (Scalar*)m_device.allocate(kernel_sz);
       typedef TensorEvalToOp<const KernelArgType> EvalTo;
       EvalTo evalToTmp(local, m_kernelArg);
-      const bool PacketAccess = internal::IsVectorizable<Device, KernelArgType>::value;
-      internal::TensorExecutor<const EvalTo, Device, PacketAccess>::run(evalToTmp, m_device);
+      const bool Vectorize = internal::IsVectorizable<Device, KernelArgType>::value;
+      internal::TensorExecutor<const EvalTo, Device, Vectorize>::run(evalToTmp, m_device);
 
       m_kernel = local;
       m_local_kernel = true;
