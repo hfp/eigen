@@ -213,7 +213,7 @@ struct ThreadPoolDevice {
     const Index max_oversharding_factor = 4;
     Index block_size = numext::mini(
         n, numext::maxi<Index>(divup<Index>(n, max_oversharding_factor * numThreads()),
-                               block_size_f));
+                               static_cast<Index>(block_size_f)));
     const Index max_block_size = numext::mini(n, 2 * block_size);
     if (block_align) {
       Index new_block_size = block_align(block_size);
