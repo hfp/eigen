@@ -43,7 +43,7 @@ class ThreadPoolTempl : public Eigen::ThreadPoolInterface {
     // and NonEmptyQueueIndex. Iteration is based on the fact that if we take
     // a walk starting thread index t and calculate num_threads - 1 subsequent
     // indices as (t + coprime) % num_threads, we will cover all threads without
-    // repetitions (effectively getting a presudo-random permutation of thread
+    // repetitions (effectively getting a pseudo-random permutation of thread
     // indices).
     for (int i = 1; i <= num_threads_; i++) {
       unsigned a = i;
