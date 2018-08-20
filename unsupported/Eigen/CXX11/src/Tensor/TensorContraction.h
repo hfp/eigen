@@ -20,44 +20,6 @@ namespace Eigen {
   *
   */
 namespace internal {
-#if defined(EIGEN_USE_LIBXSMM)
-template<typename Scalar, typename Index>
-void pack_simple(Scalar * dst, const Scalar * src, Index cols, Index rows, Index lddst, Index ldsrc) {
-  const int prefetch = 1;
-  libxsmm_matcopy(dst, src, sizeof(Scalar), rows, cols, ldsrc, lddst, &prefetch);
-}
-
-template<typename LhsScalar, typename RhsScalar, typename Scalar, typename Index>
-  struct libxsmm_wrapper {
-    libxsmm_wrapper(int /*flags*/, Index /*m*/, Index /*n*/, Index /*k*/, Index /*lda*/, Index /*ldb*/, Index /*ldc*/,
-        float/*Scalar alpha*/, float/*Scalar beta*/, int /*prefetch*/) {}
-    void operator()(const LhsScalar*, const RhsScalar*, Scalar*) const { assert(0); }
-    void operator()(const LhsScalar*, const RhsScalar*, Scalar*, const LhsScalar*, const RhsScalar*, const Scalar*) const { assert(0); }
-  };
-
-  template<typename Index>
-  struct libxsmm_wrapper<float, float, float, Index> {
-    libxsmm_mmfunction<float> m_function;
-    libxsmm_wrapper(int flags, Index m, Index n, Index k, Index lda, Index ldb, Index ldc, float alpha, float beta, int prefetch) :
-      m_function(flags, m, n, k, lda, ldb, ldc, alpha, beta, prefetch) { assert(0 != m_function); }
-    void operator()(const float* a, const float* b, float* c) const { m_function(a, b, c); }
-    void operator()(const float* a, const float* b, float* c, const float* pa, const float* pb, const float* pc) const {
-      m_function(a, b, c, pa, pb, pc);
-    }
-  };
-
-  template<typename Index>
-  struct libxsmm_wrapper<double, double, double, Index> {
-    libxsmm_mmfunction<double> m_function;
-    libxsmm_wrapper(int flags, Index m, Index n, Index k, Index lda, Index ldb, Index ldc, double alpha, double beta, int prefetch) :
-      m_function(flags, m, n, k, lda, ldb, ldc, alpha, beta, prefetch) { assert(0 != m_function); }
-    void operator()(const double* a, const double* b, double* c) const { m_function(a, b, c); }
-    void operator()(const double* a, const double* b, double* c, const double* pa, const double* pb, const double* pc) const {
-      m_function(a, b, c, pa, pb, pc);
-    }
-  };
-#endif
-
 
 template<typename Dimensions, typename LhsXprType, typename RhsXprType, typename OutputKernelType>
 struct traits<TensorContractionOp<Dimensions, LhsXprType, RhsXprType, OutputKernelType> >
@@ -244,7 +206,11 @@ struct TensorContractionEvaluatorBase
                           op.rhsExpression(), op.lhsExpression()), device),
         m_device(device),
         m_output_kernel(op.outputKernel()),
-        m_result(NULL) {
+        m_result(NULL)
+#if defined(EIGEN_USE_LIBXSMM)
+    ,   m_xgemm_scratch(NULL)
+#endif
+  {
     EIGEN_STATIC_ASSERT((static_cast<int>(TensorEvaluator<LeftArgType, Device>::Layout) ==
          static_cast<int>(TensorEvaluator<RightArgType, Device>::Layout)),
                         YOU_MADE_A_PROGRAMMING_MISTAKE);
@@ -545,12 +511,12 @@ struct TensorContractionEvaluatorBase
   EIGEN_DEVICE_FUNC
   #endif
   void evalGemm(Scalar* buffer) const {
-    #if defined(EIGEN_USE_LIBXSMM)
-    if (m_can_use_xsmm) {
-      evalGemmXSMM(buffer);
+#if defined(EIGEN_USE_LIBXSMM)
+    if (NULL != m_xgemm_handle) {
+      libxsmm_gemm_thread(m_xgemm_handle, m_xgemm_scratch, m_leftImpl.data()/*a*/, m_rightImpl.data()/*b*/, buffer/*c*/, 0/*tid*/);
       return;
     }
-    #endif
+#endif
 
     // columns in left side, rows in right side
     const Index k = this->m_k_size;
@@ -659,6 +625,12 @@ struct TensorContractionEvaluatorBase
       m_device.deallocate(m_result);
       m_result = NULL;
     }
+#if defined(EIGEN_USE_LIBXSMM)
+    if (m_xgemm_scratch != NULL) {
+      m_device.deallocate(m_xgemm_scratch);
+      m_xgemm_scratch = NULL;
+    }
+#endif
   }
 
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE CoeffReturnType coeff(Index index) const {
@@ -678,9 +650,8 @@ struct TensorContractionEvaluatorBase
 
 protected:
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void EnableXSMMIfPossible(const array<IndexPair<Index>, ContractDims>& eval_op_indices) {
-    m_can_use_xsmm = false;
-
 #if defined(EIGEN_USE_LIBXSMM)
+    m_xgemm_handle = NULL;
     typedef typename internal::remove_const<typename EvalLeftArgType::Scalar>::type LhsScalar;
     typedef typename internal::remove_const<typename EvalRightArgType::Scalar>::type RhsScalar;
     if (!std::is_same<Scalar, LhsScalar>::value ||
@@ -746,146 +717,27 @@ protected:
       return;
     }
 
-    m_can_use_xsmm = true;
+    const Scalar alpha = 1, beta = 0;
+    const char transa = (m_lhs_inner_dim_contiguous ? 'N' : 'T');
+    const char transb = (m_rhs_inner_dim_contiguous ? 'N' : 'T');
+    // rows in left side
+    const libxsmm_blasint m = static_cast<libxsmm_blasint>(this->m_i_size);
+    // columns in right side
+    const libxsmm_blasint n = static_cast<libxsmm_blasint>(this->m_j_size);
+    // columns in left side, rows in right side
+    const libxsmm_blasint k = static_cast<libxsmm_blasint>(this->m_k_size);
+    m_xgemm_handle = libxsmm_gemm_handle_init(&m_xgemm_blob,
+      libxsmm_gemm_precision_enum<Scalar>::value/*iprec*/, libxsmm_gemm_precision_enum<Scalar>::value/*oprec*/,
+      &transa, &transb, &m, &n, &k, NULL/*tight lda*/, NULL/*tight ldb*/, NULL/*tight ldc*/,
+      &alpha, &beta, LIBXSMM_GEMM_HANDLE_FLAG_AUTO, m_device.numThreads());
+    eigen_assert(NULL == m_xgemm_scratch && "EnableXSMMIfPossible is expected to be called only one time");
+    const size_t scratch_size = libxsmm_gemm_handle_get_scratch_size(m_xgemm_handle);
+    // cleanup() deallocates the scratch memory
+    m_xgemm_scratch = (0 != scratch_size ? m_device.allocate(scratch_size) : NULL);
 #else
     EIGEN_UNUSED_VARIABLE(eval_op_indices);
 #endif
   }
-
-#if defined(EIGEN_USE_LIBXSMM)
-  EIGEN_DEVICE_FUNC void evalGemmXSMM(Scalar* buffer) const {
-    // columns in left side, rows in right side
-    const Index k = this->m_k_size;
-
-    // rows in left side
-    const Index m = this->m_i_size;
-
-    // columns in right side
-    const Index n = this->m_j_size;
-
-    const bool transposeA = !m_lhs_inner_dim_contiguous;
-    const bool transposeB = !m_rhs_inner_dim_contiguous;
-
-    typedef typename internal::remove_const<typename EvalLeftArgType::Scalar>::type LhsScalar;
-    typedef typename internal::remove_const<typename EvalRightArgType::Scalar>::type RhsScalar;
-
-    internal::TensorXsmmContractionBlocking<LhsScalar, RhsScalar, Index> blocking(
-        k, m, n, 1, transposeA, transposeB);
-
-    // Outer blocks sizes
-    const Index mc_outer = blocking.outer_m();
-    const Index nc_outer = blocking.outer_n();
-    const Index kc_outer = blocking.outer_k();
-    // Inner blocks sizes
-    const Index mc = blocking.mc();
-    const Index nc = blocking.nc();
-    const Index kc = blocking.kc();
-    // Decisions whether we should copy parts of matrices
-    const bool copyA = blocking.copyA();
-    const bool copyB = blocking.copyB();
-
-    const LhsScalar* leftData = m_leftImpl.data();
-    const RhsScalar* rightData = m_rightImpl.data();
-
-    const libxsmm_blasint stride_A = static_cast<libxsmm_blasint>(transposeA ? k : m);
-    const libxsmm_blasint stride_B = static_cast<libxsmm_blasint>(transposeB ? n : k);
-    const libxsmm_blasint stride_C = static_cast<libxsmm_blasint>(m);
-
-    const libxsmm_blasint stride_blockA = static_cast<libxsmm_blasint>(mc);
-    // Use bigger stride to avoid hitting same cache line too often.
-    // This consistently gives +~0.5 Gflops.
-    const libxsmm_blasint stride_panelB = static_cast<libxsmm_blasint>(
-        (kc % 32) == 0 ? (kc + 16) : kc
-    );
-
-    LhsScalar* blockA = NULL;
-    RhsScalar* panelB = NULL;
-
-    if (copyA) {
-      blockA = static_cast<LhsScalar*>(this->m_device.allocate(mc * kc * sizeof(LhsScalar)));
-    }
-    if (copyB) {
-      panelB = static_cast<RhsScalar*>(this->m_device.allocate(nc_outer * stride_panelB * sizeof(RhsScalar)));
-    }
-
-    const Index kernel_stride_A = (copyA ? stride_blockA : stride_A);
-    const Index kernel_stride_B = (copyB ? stride_panelB : stride_B);
-
-    // Kernel for the general case (not edges)
-    typedef internal::libxsmm_wrapper<LhsScalar, RhsScalar, Scalar, Index> libxsmm_wrapper;
-    const libxsmm_wrapper kernel = libxsmm_wrapper(0/*flags*/, mc, nc, kc, kernel_stride_A, kernel_stride_B, stride_C, 1, 1, blocking.prefetch());
-    assert(mc <= m && nc <= n && kc <= k);
-
-    // Outer blocking
-    for (Index ki_outer = 0; ki_outer < k; ki_outer += kc_outer) {
-      for (Index mi_outer = 0; mi_outer < m; mi_outer += mc_outer) {
-        for (Index ni_outer = 0; ni_outer < n; ni_outer += nc_outer) {
-          using numext::mini;
-
-          Index actual_nc_outer = mini(ni_outer+nc_outer, n) - ni_outer;
-
-          // Inner blocking
-          for (Index ki = ki_outer; ki < mini(ki_outer+kc_outer, k); ki += kc) {
-            const Index actual_kc = mini(ki_outer+kc_outer, mini(ki+kc, k)) - ki;
-            const float beta = static_cast<float>(0 != ki ? 1 : 0);
-
-            if (copyB) {
-              if (transposeB) {
-                libxsmm_otrans(panelB, rightData + ki*stride_B + ni_outer, sizeof(RhsScalar), actual_nc_outer, actual_kc, stride_B, stride_panelB);
-              } else {
-                internal::pack_simple<RhsScalar, Index>(panelB, rightData + ni_outer*stride_B + ki, actual_nc_outer, actual_kc, stride_panelB, stride_B);
-              }
-            }
-
-            for (Index mi = mi_outer; mi < mini(mi_outer+mc_outer, m); mi += mc) {
-              const Index actual_mc = mini(mi_outer+mc_outer, mini(mi+mc, m)) - mi;
-
-              const LhsScalar* a = (transposeA ? (leftData + mi*stride_A + ki) :
-                                                 (leftData + ki*stride_A + mi));
-
-              if (copyA) {
-                if (transposeA) {
-                  libxsmm_otrans(blockA, a, sizeof(LhsScalar), actual_kc, actual_mc, stride_A, stride_blockA);
-                } else {
-                  internal::pack_simple<LhsScalar, Index>(blockA, a, actual_kc, actual_mc, stride_blockA, stride_A);
-                }
-              }
-              const LhsScalar* actual_a = (copyA ? blockA : a);
-
-              for (Index ni = ni_outer; ni < mini(ni_outer+nc_outer, n); ni += nc) {
-                const Index actual_nc = mini(ni_outer+nc_outer, mini(ni+nc, n)) - ni;
-
-                const RhsScalar* b = rightData + ni*stride_B + ki;
-                Scalar* c = buffer + ni*stride_C + mi;
-                const Scalar* cp = c + nc*stride_C;
-
-                const RhsScalar* actual_b = (copyB ? (panelB + (ni-ni_outer)*stride_panelB) : b);
-                const RhsScalar* bp = (copyB ? (panelB + nc*stride_panelB) : (b + nc*stride_B));
-
-                if (actual_mc == mc && actual_kc == kc && actual_nc == nc && beta == 1) {
-                  // Most used, cached kernel.
-                  kernel(actual_a, actual_b, c, actual_a, bp, cp);
-                } else {
-                  assert(actual_mc <= m && actual_nc <= n && actual_kc <= k);
-                  // Edges - use libxsmm kernel cache.
-                  libxsmm_wrapper(0/*flags*/, actual_mc, actual_nc, actual_kc, kernel_stride_A, kernel_stride_B, stride_C, 1, beta, blocking.prefetch())(
-                    actual_a, actual_b, c, actual_a, bp, cp);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (copyA) {
-      this->m_device.deallocate(blockA);
-    }
-    if (copyB) {
-      this->m_device.deallocate(panelB);
-    }
-  }
-#endif
 
   // Prevent assignment
   TensorContractionEvaluatorBase& operator = (const TensorContractionEvaluatorBase&);
@@ -915,7 +767,11 @@ protected:
   const Device& m_device;
   OutputKernelType m_output_kernel;
   Scalar* m_result;
-  bool m_can_use_xsmm;
+#if defined(EIGEN_USE_LIBXSMM)
+  libxsmm_gemm_blob m_xgemm_blob; // handle-data
+  libxsmm_gemm_handle* m_xgemm_handle;
+  void* m_xgemm_scratch;
+#endif
 };
 
 
