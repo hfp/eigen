@@ -60,7 +60,7 @@ struct __half_raw {
  #if defined(EIGEN_HAS_OLD_HIP_FP16)
 // Make a __half_raw definition that is
 // ++ compatible with that of Eigen and
-// ++ add a implcit conversion to the native __half of the old HIP implementation.
+// ++ add a implicit conversion to the native __half of the old HIP implementation.
 //
 // Keeping ".x" as "unsigned short" keeps the interface the same between the Eigen and HIP implementation.
 //
@@ -68,7 +68,7 @@ struct __half_raw {
 //   ++ __half is a typedef of __fp16
 //   ++ the "__h*" routines take "__half" arguments
 // so we need to implicitly convert "__half_raw" to "__half" to avoid having to explicitly make 
-// that conversiion in each call to a "__h*" routine...that is why we have "operator __half" routine
+// that conversion in each call to a "__h*" routine...that is why we have "operator __half" routine
 struct __half_raw {
   EIGEN_DEVICE_FUNC __half_raw() : x(0) {}
   explicit EIGEN_DEVICE_FUNC __half_raw(unsigned short raw) : x(raw) {}
