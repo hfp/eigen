@@ -717,7 +717,7 @@ protected:
       return;
     }
 
-    const Scalar alpha = 1, beta = 0;
+    const Scalar alpha(1), beta(0);
     const char transa = (m_lhs_inner_dim_contiguous ? 'N' : 'T');
     const char transb = (m_rhs_inner_dim_contiguous ? 'N' : 'T');
     // rows in left side
