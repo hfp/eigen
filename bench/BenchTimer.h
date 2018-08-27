@@ -27,6 +27,7 @@
 # include <unistd.h>
 #endif
 
+#if !(defined(_WIN32) || defined(__CYGWIN__))
 static void escape(void *p) {
   asm volatile("" : : "g"(p) : "memory");
 }
@@ -34,6 +35,7 @@ static void escape(void *p) {
 static void clobber() {
   asm volatile("" : : : "memory");
 }
+#endif
 
 #include <Eigen/Core>
 
