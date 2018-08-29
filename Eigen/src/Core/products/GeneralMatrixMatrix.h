@@ -154,16 +154,34 @@ static void run(Index rows, Index cols, Index depth,
   }
   else
 #endif // EIGEN_HAS_OPENMP
-  {
+  { // this is the sequential version!
     EIGEN_UNUSED_VARIABLE(info);
 
-    // this is the sequential version!
-    std::size_t sizeA = kc*mc;
-    std::size_t sizeB = kc*nc;
+    LhsScalar* memA = blocking.blockA();
+    const std::size_t sizeA = kc * mc;
+    if (0 == memA && (mc != rows || kc != depth)) {
+      Eigen::internal::check_size_for_overflow<LhsScalar>(sizeA);
+      memA = reinterpret_cast<LhsScalar*>((sizeof(LhsScalar) * sizeA) <= EIGEN_STACK_ALLOCATION_LIMIT
+        ? EIGEN_ALIGNED_ALLOCA(sizeof(LhsScalar) * sizeA)
+        : Eigen::internal::aligned_malloc(sizeof(LhsScalar) * sizeA));
+    }
+    Eigen::internal::aligned_stack_memory_handler<LhsScalar> blockA_stack_memory_destructor(
+      memA, sizeA, (sizeof(LhsScalar) * sizeA) > EIGEN_STACK_ALLOCATION_LIMIT);
+    // Omit allocating (and later copying) a (small) matrix that just matches the block-size
+    const LhsScalar *const blockA = (0 != memA ? memA : _lhs);
 
-    ei_declare_aligned_stack_constructed_variable(LhsScalar, blockA, sizeA, blocking.blockA());
-    ei_declare_aligned_stack_constructed_variable(RhsScalar, blockB, sizeB, blocking.blockB());
-
+    RhsScalar* memB = blocking.blockB();
+    const std::size_t sizeB = kc * nc;
+    if (0 == memB && (kc != depth || nc != cols)) {
+      Eigen::internal::check_size_for_overflow<RhsScalar>(sizeB);
+      memB = reinterpret_cast<RhsScalar*>((sizeof(RhsScalar) * sizeB) <= EIGEN_STACK_ALLOCATION_LIMIT
+        ? EIGEN_ALIGNED_ALLOCA(sizeof(RhsScalar) * sizeB)
+        : Eigen::internal::aligned_malloc(sizeof(RhsScalar) * sizeB));
+    }
+    Eigen::internal::aligned_stack_memory_handler<RhsScalar> blockB_stack_memory_destructor(
+      memB, sizeB, (sizeof(RhsScalar) * sizeB) > EIGEN_STACK_ALLOCATION_LIMIT);
+    // Omit allocating (and later copying) a (small) matrix that just matches the block-size
+    const RhsScalar *const blockB = (0 != memB ? memB : _rhs);
     const bool pack_rhs_once = mc!=rows && kc==depth && nc==cols;
 
     // For each horizontal panel of the rhs, and corresponding panel of the lhs...
@@ -174,13 +192,13 @@ static void run(Index rows, Index cols, Index depth,
       for(Index k2=0; k2<depth; k2+=kc)
       {
         const Index actual_kc = (std::min)(k2+kc,depth)-k2;
-
-        // OK, here we have selected one horizontal panel of rhs and one vertical panel of lhs.
-        // => Pack lhs's panel into a sequential chunk of memory (L2/L3 caching)
-        // Note that this panel will be read as many times as the number of blocks in the rhs's
-        // horizontal panel which is, in practice, a very low number.
-        pack_lhs(blockA, lhs.getSubMapper(i2,k2), actual_kc, actual_mc);
-
+        if (actual_mc != rows || actual_kc != depth) {
+          // OK, here we have selected one horizontal panel of rhs and one vertical panel of lhs.
+          // => Pack lhs's panel into a sequential chunk of memory (L2/L3 caching)
+          // Note that this panel will be read as many times as the number of blocks in the rhs's
+          // horizontal panel which is, in practice, a very low number.
+          pack_lhs(memA, lhs.getSubMapper(i2, k2), actual_kc, actual_mc);
+        }
         // For each kc x nc block of the rhs's horizontal panel...
         for(Index j2=0; j2<cols; j2+=nc)
         {
@@ -189,8 +207,9 @@ static void run(Index rows, Index cols, Index depth,
           // We pack the rhs's block into a sequential chunk of memory (L2 caching)
           // Note that this block will be read a very high number of times, which is equal to the number of
           // micro horizontal panel of the large rhs's panel (e.g., rows/12 times).
-          if((!pack_rhs_once) || i2==0)
-            pack_rhs(blockB, rhs.getSubMapper(k2,j2), actual_kc, actual_nc);
+          if ((!pack_rhs_once || i2 == 0) && (kc != depth || nc != cols)) {
+            pack_rhs(memB, rhs.getSubMapper(k2, j2), actual_kc, actual_nc);
+          }
 
           // Everything is packed, we can now call the panel * block kernel:
           gebp(res.getSubMapper(i2, j2), blockA, blockB, actual_mc, actual_kc, actual_nc, alpha);
