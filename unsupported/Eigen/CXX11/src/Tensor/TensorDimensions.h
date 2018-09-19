@@ -290,10 +290,29 @@ struct DSizes : array<DenseIndex, NumDims> {
     }
   }
 
+  // Enable DSizes index type promotion only if we are promoting to the
+  // larger type, e.g. allow to promote dimensions of type int to long.
+  template<typename OtherIndex>
+  EIGEN_DEVICE_FUNC
+  explicit DSizes(const array<OtherIndex, NumDims>& other,
+                  // Default template parameters require c++11.
+                  typename internal::enable_if<
+                     internal::is_same<
+                         DenseIndex,
+                         typename internal::promote_index_type<
+                             DenseIndex,
+                             OtherIndex
+                         >::type
+                     >::value, void*>::type = 0) {
+    for (int i = 0; i < NumDims; ++i) {
+      (*this)[i] = static_cast<DenseIndex>(other[i]);
+    }
+  }
+
 #ifdef EIGEN_HAS_INDEX_LIST
   template <typename FirstType, typename... OtherTypes>
   EIGEN_DEVICE_FUNC
-  DSizes(const Eigen::IndexList<FirstType, OtherTypes...>& dimensions) {
+  explicit DSizes(const Eigen::IndexList<FirstType, OtherTypes...>& dimensions) {
     for (int i = 0; i < dimensions.count; ++i) {
       (*this)[i] = dimensions[i];
     }
