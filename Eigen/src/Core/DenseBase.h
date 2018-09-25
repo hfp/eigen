@@ -579,6 +579,7 @@ template<typename Derived> class DenseBase
 #   include "../plugins/CommonCwiseUnaryOps.h"
 #   include "../plugins/BlockMethods.h"
 #   include "../plugins/IndexedViewMethods.h"
+#   include "../plugins/ReshapedMethods.h"
 #   ifdef EIGEN_DENSEBASE_PLUGIN
 #     include EIGEN_DENSEBASE_PLUGIN
 #   endif

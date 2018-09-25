@@ -222,6 +222,7 @@ using std::ptrdiff_t;
 #endif
 
 #include "src/Core/util/IndexedViewHelper.h"
+#include "src/Core/util/ReshapedHelper.h"
 #include "src/Core/ArithmeticSequence.h"
 #include "src/Core/IO.h"
 #include "src/Core/DenseCoeffsBase.h"
@@ -265,6 +266,7 @@ using std::ptrdiff_t;
 #include "src/Core/Block.h"
 #include "src/Core/VectorBlock.h"
 #include "src/Core/IndexedView.h"
+#include "src/Core/Reshaped.h"
 #include "src/Core/Transpose.h"
 #include "src/Core/DiagonalMatrix.h"
 #include "src/Core/Diagonal.h"
