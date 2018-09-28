@@ -21,7 +21,7 @@ enum {
 
 
 // Default Blocking Strategy
-template <typename LhsScalar, typename RhsScalar, typename Index, int ShardingType=ShardByCol>
+template<typename ResScalar, typename LhsScalar, typename RhsScalar, typename StorageIndex, int ShardingType = ShardByCol>
 class TensorContractionBlocking {
  public:
 
@@ -42,7 +42,7 @@ class TensorContractionBlocking {
   #if !defined(EIGEN_HIPCC)
   EIGEN_DEVICE_FUNC
   #endif
- TensorContractionBlocking(Index k, Index m, Index n, Index num_threads = 1) :
+ TensorContractionBlocking(StorageIndex k, StorageIndex m, StorageIndex n, StorageIndex num_threads = 1) :
       kc_(k), mc_(m), nc_(n)
   {
     if (ShardingType == ShardByCol) {
@@ -53,23 +53,23 @@ class TensorContractionBlocking {
     }
   }
 
-  EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE Index kc() const { return kc_; }
-  EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE Index mc() const { return mc_; }
-  EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE Index nc() const { return nc_; }
+  EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE StorageIndex kc() const { return kc_; }
+  EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE StorageIndex mc() const { return mc_; }
+  EIGEN_DEVICE_FUNC EIGEN_ALWAYS_INLINE StorageIndex nc() const { return nc_; }
 
  private:
-  Index kc_;
-  Index mc_;
-  Index nc_;
+  StorageIndex kc_;
+  StorageIndex mc_;
+  StorageIndex nc_;
 };
 
 
 
 #if defined(EIGEN_USE_LIBXSMM)
-template <typename LhsScalar, typename RhsScalar, typename Index>
+template <typename LhsScalar, typename RhsScalar, typename StorageIndex>
 class TensorXsmmContractionBlocking {
  public:
-  TensorXsmmContractionBlocking(Index k, Index m, Index n,
+  TensorXsmmContractionBlocking(StorageIndex k, StorageIndex m, StorageIndex n,
       size_t max_num_threads = 1, bool transposeA = false,
       bool transposeB = false):
     k_(k), m_(m), n_(n), transposeA_(transposeA),
@@ -100,12 +100,17 @@ class TensorXsmmContractionBlocking {
       outer_m_ = m; outer_k_ = k; outer_n_ = n;
       copyA_ = false; copyB_ = false;
     } else {
-      const int arch = libxsmm_cpuid_x86();
+      int arch = libxsmm_cpuid_x86();
 
       if (arch == LIBXSMM_X86_AVX512_CORE) {
         // skylake
         mc_ = 64; kc_ = 64; nc_ = 24;
         outer_m_ = 512; outer_k_ = 512; outer_n_ = 24*22;
+        // Hack to use this kernel architecture as the other one has performance
+        // issues (no hardware prefetching).
+        // TODO(nishantpatil): This should be removed if the issues are fixed,
+        // or this one becomes the default.
+        setenv("LIBXSMM_AVX512_CLASSIC_GEMM", "1", 1);
       } else if (arch == LIBXSMM_X86_AVX2) {
         // haswell
         mc_ = 32; kc_ = 192; nc_ = 33;
@@ -130,7 +135,7 @@ class TensorXsmmContractionBlocking {
     copyB_ = copyB_ || transposeB;
 
     // See libxsmm_gemm_prefetch_type definition in libxsmm_typedefs.h
-    prefetch_ = LIBXSMM_GEMM_PREFETCH_AL2BL2_VIA_C;
+    prefetch_ = LIBXSMM_PREFETCH_AL2CL2BL2_VIA_C;
 
 #endif
 
@@ -149,7 +154,7 @@ class TensorXsmmContractionBlocking {
     size_t parallelism = numext::maxi(compute_parallelism, pack_parallelism);
 
     num_threads_ = numext::mini<size_t>(num_threads_,
-      static_cast<size_t>(parallelism / MIN_JOBS_PER_THREAD));
+                                    parallelism / MIN_JOBS_PER_THREAD);
     num_threads_ = numext::maxi<size_t>(num_threads_, 1);
 
     // For optimal performance outer block sizes should be multiplies of kernel
@@ -159,28 +164,28 @@ class TensorXsmmContractionBlocking {
     eigen_assert(outer_n_ % nc_ == 0 || outer_n_ >= n);
   }
 
-  EIGEN_ALWAYS_INLINE Index kc() const { return kc_; }
-  EIGEN_ALWAYS_INLINE Index mc() const { return mc_; }
-  EIGEN_ALWAYS_INLINE Index nc() const { return nc_; }
-  EIGEN_ALWAYS_INLINE Index outer_k() const { return outer_k_; }
-  EIGEN_ALWAYS_INLINE Index outer_m() const { return outer_m_; }
-  EIGEN_ALWAYS_INLINE Index outer_n() const { return outer_n_; }
+  EIGEN_ALWAYS_INLINE StorageIndex kc() const { return kc_; }
+  EIGEN_ALWAYS_INLINE StorageIndex mc() const { return mc_; }
+  EIGEN_ALWAYS_INLINE StorageIndex nc() const { return nc_; }
+  EIGEN_ALWAYS_INLINE StorageIndex outer_k() const { return outer_k_; }
+  EIGEN_ALWAYS_INLINE StorageIndex outer_m() const { return outer_m_; }
+  EIGEN_ALWAYS_INLINE StorageIndex outer_n() const { return outer_n_; }
   EIGEN_ALWAYS_INLINE bool copyA() const { return copyA_; }
   EIGEN_ALWAYS_INLINE bool copyB() const { return copyB_; }
   EIGEN_ALWAYS_INLINE bool transposeA() const { return transposeA_; }
   EIGEN_ALWAYS_INLINE bool transposeB() const { return transposeB_; }
-  EIGEN_ALWAYS_INLINE int num_threads() const { return static_cast<int>(num_threads_); }
-  EIGEN_ALWAYS_INLINE Index blocks_m() const { return divup(m_, mc_); }
-  EIGEN_ALWAYS_INLINE Index blocks_k() const { return divup(k_, kc_); }
-  EIGEN_ALWAYS_INLINE Index blocks_n() const { return divup(n_, nc_); }
+  EIGEN_ALWAYS_INLINE int num_threads() const { return num_threads_; }
+  EIGEN_ALWAYS_INLINE StorageIndex blocks_m() const { return divup(m_, mc_); }
+  EIGEN_ALWAYS_INLINE StorageIndex blocks_k() const { return divup(k_, kc_); }
+  EIGEN_ALWAYS_INLINE StorageIndex blocks_n() const { return divup(n_, nc_); }
   EIGEN_ALWAYS_INLINE libxsmm_gemm_prefetch_type prefetch() const {
     return prefetch_;
   }
 
  private:
-  Index k_, m_, n_;
-  Index kc_, mc_, nc_;
-  Index outer_k_, outer_m_, outer_n_;
+  StorageIndex k_, m_, n_;
+  StorageIndex kc_, mc_, nc_;
+  StorageIndex outer_k_, outer_m_, outer_n_;
   bool copyA_, copyB_, transposeA_, transposeB_;
   size_t num_threads_;
 
