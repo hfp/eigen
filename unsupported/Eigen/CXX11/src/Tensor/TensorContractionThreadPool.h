@@ -788,21 +788,22 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
     // The underlying GEMM kernel assumes that k is a multiple of 8 and
     // subtle breakage occurs if this is violated.
     Index block_size = 8 * divup<Index>(k, 8 * num_threads);
-    int num_blocks = divup<Index>(k, block_size);
+    Index num_blocks = divup<Index>(k, block_size);
     // we use 'result' for the first block's partial result.
     MaxSizeVector<Scalar*> block_buffers(num_blocks - 1);
     Barrier barrier(num_blocks);
-    auto process_block = [=, &barrier](Scalar* buf, Index first, Index last) {
+    auto process_block = [=, &barrier](Scalar* buf, Index begin, Index end) {
       ::memset(buf, 0, m * n * sizeof(Scalar));
       TENSOR_CONTRACTION_DISPATCH(
-          this->template evalGemmPartial, Alignment,
-          (buf, first, last, this->m_device.numThreads()));
+          this->template evalGemmPartialWithoutOutputKernel, Alignment,
+          (buf, begin, end, this->m_device.numThreads()));
       barrier.Notify();
     };
     Index start = 0;
-    for (int blocks_left = num_blocks; blocks_left > 0; --blocks_left) {
-      // The underlying GEMM kernel assumes that k is a multiple of 8 and
-      // subtle breakage occurs if this is violated.
+    for (Index blocks_left = num_blocks; blocks_left > 0; --blocks_left) {
+      // The underlying GEMM kernel assumes that k is a multiple of packet size
+      // (currently largest packet size is 8) and subtle breakage occurs if
+      // this is violated.
       block_size = 8 * divup<Index>(k - start, 8 * blocks_left);
       Scalar* buf;
       if (start == 0) {
@@ -827,6 +828,14 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
       addToBuffer<Alignment>(m * n, buf, result);
       this->m_device.deallocate(buf);
     }
+
+    // Finally call output kernel with finalized output buffer.
+    typedef internal::blas_data_mapper<Scalar, Index, ColMajor> OutputMapper;
+    this->m_output_kernel(OutputMapper(result, m),
+                          this->m_tensor_contraction_params,
+                          static_cast<Eigen::Index>(0),
+                          static_cast<Eigen::Index>(0),
+                          m, n);
   }
 
   TensorOpCost contractionCostPerInnerDim(Index m, Index n, Index k) const {
@@ -852,7 +861,7 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
     // result.
     double reduction_cost = TensorCostModel<ThreadPoolDevice>::totalCost(
         m * n, TensorOpCost(2, 1, 1, true, output_packet_size));
-    Index num_threads = 1;
+    int num_threads = 1;
     double min_cost = total_parallel_cost;
     double kPerThreadOverHead = 4000;
     double kFixedOverHead = 100000;
