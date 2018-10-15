@@ -15,7 +15,7 @@ namespace Eigen {
 namespace internal {
 
 // Disable the code for older versions of gcc that don't support many of the required avx512 instrinsics.
-#if EIGEN_GNUC_AT_LEAST(5, 3)
+#if EIGEN_GNUC_AT_LEAST(5, 3) || EIGEN_COMP_CLANG
 
 #define _EIGEN_DECLARE_CONST_Packet16f(NAME, X) \
   const Packet16f p16f_##NAME = pset1<Packet16f>(X)
@@ -64,11 +64,9 @@ plog<Packet16f>(const Packet16f& _x) {
   _EIGEN_DECLARE_CONST_Packet16f(cephes_log_q2, 0.693359375f);
 
   // invalid_mask is set to true when x is NaN
-  __mmask16 invalid_mask =
-      _mm512_cmp_ps_mask(x, _mm512_setzero_ps(), _CMP_NGE_UQ);
-  __mmask16 iszero_mask =
-      _mm512_cmp_ps_mask(x, _mm512_setzero_ps(), _CMP_EQ_UQ);
-
+  __mmask16 invalid_mask =  _mm512_cmp_ps_mask(x, _mm512_setzero_ps(), _CMP_NGE_UQ);
+  __mmask16 iszero_mask  =  _mm512_cmp_ps_mask(x, _mm512_setzero_ps(), _CMP_EQ_OQ);
+      
   // Truncate input values to the minimum positive normal.
   x = pmax(x, p16f_min_norm_pos);
 

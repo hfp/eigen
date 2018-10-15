@@ -9,8 +9,15 @@
 // Public License v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+#ifndef EIGEN_SPARSE_TEST_INCLUDED_FROM_SPARSE_EXTRA
 static long g_realloc_count = 0;
 #define EIGEN_SPARSE_COMPRESSED_STORAGE_REALLOCATE_PLUGIN g_realloc_count++;
+
+static long g_dense_op_sparse_count = 0;
+#define EIGEN_SPARSE_ASSIGNMENT_FROM_DENSE_OP_SPARSE_PLUGIN g_dense_op_sparse_count++;
+#define EIGEN_SPARSE_ASSIGNMENT_FROM_SPARSE_ADD_DENSE_PLUGIN g_dense_op_sparse_count+=10;
+#define EIGEN_SPARSE_ASSIGNMENT_FROM_SPARSE_SUB_DENSE_PLUGIN g_dense_op_sparse_count+=20;
+#endif
 
 #include "sparse.h"
 
@@ -194,6 +201,7 @@ template<typename SparseMatrixType> void sparse_basic(const SparseMatrixType& re
     VERIFY_IS_APPROX(refM4.cwiseProduct(m3), refM4.cwiseProduct(refM3));
 //     VERIFY_IS_APPROX(m3.cwise()/refM4, refM3.cwise()/refM4);
 
+    // mixed sparse-dense
     VERIFY_IS_APPROX(refM4 + m3, refM4 + refM3);
     VERIFY_IS_APPROX(m3 + refM4, refM3 + refM4);
     VERIFY_IS_APPROX(refM4 - m3, refM4 - refM3);
@@ -221,6 +229,26 @@ template<typename SparseMatrixType> void sparse_basic(const SparseMatrixType& re
 
     VERIFY_IS_APPROX(m1+=m2, refM1+=refM2);
     VERIFY_IS_APPROX(m1-=m2, refM1-=refM2);
+
+    refM3 = refM1;
+    
+    VERIFY_IS_APPROX(refM1+=m2, refM3+=refM2);
+    VERIFY_IS_APPROX(refM1-=m2, refM3-=refM2);
+
+    g_dense_op_sparse_count=0; VERIFY_IS_APPROX(refM1 =m2+refM4, refM3 =refM2+refM4);  VERIFY_IS_EQUAL(g_dense_op_sparse_count,10);
+    g_dense_op_sparse_count=0; VERIFY_IS_APPROX(refM1+=m2+refM4, refM3+=refM2+refM4);  VERIFY_IS_EQUAL(g_dense_op_sparse_count,1);
+    g_dense_op_sparse_count=0; VERIFY_IS_APPROX(refM1-=m2+refM4, refM3-=refM2+refM4);  VERIFY_IS_EQUAL(g_dense_op_sparse_count,1);
+    g_dense_op_sparse_count=0; VERIFY_IS_APPROX(refM1 =refM4+m2, refM3 =refM2+refM4);  VERIFY_IS_EQUAL(g_dense_op_sparse_count,1);
+    g_dense_op_sparse_count=0; VERIFY_IS_APPROX(refM1+=refM4+m2, refM3+=refM2+refM4);  VERIFY_IS_EQUAL(g_dense_op_sparse_count,1);
+    g_dense_op_sparse_count=0; VERIFY_IS_APPROX(refM1-=refM4+m2, refM3-=refM2+refM4);  VERIFY_IS_EQUAL(g_dense_op_sparse_count,1);
+
+    g_dense_op_sparse_count=0; VERIFY_IS_APPROX(refM1 =m2-refM4, refM3 =refM2-refM4);  VERIFY_IS_EQUAL(g_dense_op_sparse_count,20);
+    g_dense_op_sparse_count=0; VERIFY_IS_APPROX(refM1+=m2-refM4, refM3+=refM2-refM4);  VERIFY_IS_EQUAL(g_dense_op_sparse_count,1);
+    g_dense_op_sparse_count=0; VERIFY_IS_APPROX(refM1-=m2-refM4, refM3-=refM2-refM4);  VERIFY_IS_EQUAL(g_dense_op_sparse_count,1);
+    g_dense_op_sparse_count=0; VERIFY_IS_APPROX(refM1 =refM4-m2, refM3 =refM4-refM2);  VERIFY_IS_EQUAL(g_dense_op_sparse_count,1);
+    g_dense_op_sparse_count=0; VERIFY_IS_APPROX(refM1+=refM4-m2, refM3+=refM4-refM2);  VERIFY_IS_EQUAL(g_dense_op_sparse_count,1);
+    g_dense_op_sparse_count=0; VERIFY_IS_APPROX(refM1-=refM4-m2, refM3-=refM4-refM2);  VERIFY_IS_EQUAL(g_dense_op_sparse_count,1);
+    refM3 = m3;
 
     if (rows>=2 && cols>=2)
     {
@@ -617,6 +645,7 @@ template<typename SparseMatrixType> void sparse_basic(const SparseMatrixType& re
 
 template<typename SparseMatrixType>
 void big_sparse_triplet(Index rows, Index cols, double density) {
+  g_dense_op_sparse_count = 0;  // Suppresses compiler warning.
   typedef typename SparseMatrixType::StorageIndex StorageIndex;
   typedef typename SparseMatrixType::Scalar Scalar;
   typedef Triplet<Scalar,Index> TripletType;
@@ -655,6 +684,8 @@ void bug1105()
   }
 }
 
+#ifndef EIGEN_SPARSE_TEST_INCLUDED_FROM_SPARSE_EXTRA
+
 EIGEN_DECLARE_TEST(sparse_basic)
 {
   for(int i = 0; i < g_repeat; i++) {
@@ -687,3 +718,4 @@ EIGEN_DECLARE_TEST(sparse_basic)
 
   CALL_SUBTEST_7( bug1105<0>() );
 }
+#endif
