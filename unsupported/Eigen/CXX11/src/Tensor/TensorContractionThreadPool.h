@@ -833,8 +833,8 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
     typedef internal::blas_data_mapper<Scalar, Index, ColMajor> OutputMapper;
     this->m_output_kernel(OutputMapper(result, m),
                           this->m_tensor_contraction_params,
-                          static_cast<Eigen::Index>(0),
-                          static_cast<Eigen::Index>(0),
+                          static_cast<Index>(0),
+                          static_cast<Index>(0),
                           m, n);
   }
 
