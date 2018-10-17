@@ -109,26 +109,30 @@ struct ThreadPoolDevice {
   }
 
   template <class Function, class... Args>
-  EIGEN_STRONG_INLINE Notification* enqueue(Function&& f, Args&&... args) const {
+  EIGEN_STRONG_INLINE Notification* enqueue(Function&& f,
+                                            Args&&... args) const {
     Notification* n = new Notification();
-    pool_->Schedule(std::bind(&FunctionWrapperWithNotification<Function, Args...>::run, n, f, args...));
+    pool_->Schedule(
+        std::bind(&FunctionWrapperWithNotification<Function, Args...>::run, n,
+                  std::move(f), args...));
     return n;
   }
 
   template <class Function, class... Args>
-  EIGEN_STRONG_INLINE void enqueue_with_barrier(Barrier* b,
-                                                Function&& f,
+  EIGEN_STRONG_INLINE void enqueue_with_barrier(Barrier* b, Function&& f,
                                                 Args&&... args) const {
-    pool_->Schedule(std::bind(
-        &FunctionWrapperWithBarrier<Function, Args...>::run, b, f, args...));
+    pool_->Schedule(
+        std::bind(&FunctionWrapperWithBarrier<Function, Args...>::run, b,
+                  std::move(f), args...));
   }
 
   template <class Function, class... Args>
-  EIGEN_STRONG_INLINE void enqueueNoNotification(Function&& f, Args&&... args) const {
+  EIGEN_STRONG_INLINE void enqueueNoNotification(Function&& f,
+                                                 Args&&... args) const {
     if (sizeof...(args) > 0) {
-      pool_->Schedule(std::bind(f, args...));
+      pool_->Schedule(std::bind(std::move(f), args...));
     } else {
-      pool_->Schedule(f);
+      pool_->Schedule(std::move(f));
     }
   }
 
@@ -214,18 +218,25 @@ struct ThreadPoolDevice {
     Barrier barrier(static_cast<unsigned int>(block_count));
     std::function<void(Index, Index)> handleRange;
     handleRange = [=, &handleRange, &barrier, &f](Index firstIdx, Index lastIdx) {
-      if (lastIdx - firstIdx <= block_size) {
-        // Single block or less, execute directly.
-        f(firstIdx, lastIdx);
-        barrier.Notify();
-        return;
+      while (lastIdx - firstIdx > block_size) {
+        // Split into halves and schedule the second half on a different thread.
+        const Index midIdx = firstIdx + divup((lastIdx - firstIdx) / 2, block_size) * block_size;
+        pool_->Schedule([=, &handleRange]() { handleRange(midIdx, lastIdx); });
+        lastIdx = midIdx;
       }
-      // Split into halves and submit to the pool.
-      Index mid = firstIdx + divup((lastIdx - firstIdx) / 2, block_size) * block_size;
-      pool_->Schedule([=, &handleRange]() { handleRange(mid, lastIdx); });
-      handleRange(firstIdx, mid);
+      // Single block or less, execute directly.
+      f(firstIdx, lastIdx);
+      barrier.Notify();
     };
-    handleRange(0, n);
+    if (block_count <= numThreads()) {
+      // Avoid a thread hop by running the root of the tree and one block on the
+      // main thread.
+      handleRange(0, n);
+    } else {
+      // Execute the root in the thread pool to avoid running work on more than
+      // numThreads() threads.
+      pool_->Schedule([=, &handleRange]() { handleRange(0, n); });
+    }
     barrier.Wait();
   }
 
