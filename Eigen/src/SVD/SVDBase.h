@@ -180,8 +180,10 @@ public:
   RealScalar threshold() const
   {
     eigen_assert(m_isInitialized || m_usePrescribedThreshold);
+    // this temporary is needed to workaround a MSVC issue
+    Index diagSize = (std::max<Index>)(1,m_diagSize);
     return m_usePrescribedThreshold ? m_prescribedThreshold
-                                    : (std::max<Index>)(1,m_diagSize)*NumTraits<Scalar>::epsilon();
+                                    : diagSize*NumTraits<Scalar>::epsilon();
   }
 
   /** \returns true if \a U (full or thin) is asked for in this SVD decomposition */
@@ -243,6 +245,10 @@ protected:
     : m_isInitialized(false),
       m_isAllocated(false),
       m_usePrescribedThreshold(false),
+      m_computeFullU(false),
+      m_computeThinU(false),
+      m_computeFullV(false),
+      m_computeThinV(false),
       m_computationOptions(0),
       m_rows(-1), m_cols(-1), m_diagSize(0)
   {
