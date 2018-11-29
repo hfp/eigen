@@ -187,8 +187,19 @@ template<> struct packet_traits<int>    : default_packet_traits
 };
 
 
-template<> struct unpacket_traits<Packet4f> { typedef float  type; enum {size=4, alignment=Aligned16}; typedef Packet4f half; };
-template<> struct unpacket_traits<Packet4i> { typedef int    type; enum {size=4, alignment=Aligned16}; typedef Packet4i half; };
+template<> struct unpacket_traits<Packet4f>
+{
+  typedef float     type;
+  typedef Packet4f  half;
+  typedef Packet4i  integer_packet;
+  enum {size=4, alignment=Aligned16};
+};
+template<> struct unpacket_traits<Packet4i>
+{
+  typedef int       type;
+  typedef Packet4i  half;
+  enum {size=4, alignment=Aligned16};
+};
 
 inline std::ostream & operator <<(std::ostream & s, const Packet16uc & v)
 {
@@ -567,19 +578,13 @@ template<> EIGEN_STRONG_INLINE Packet4i preverse(const Packet4i& a)
 template<> EIGEN_STRONG_INLINE Packet4f pabs(const Packet4f& a) { return vec_abs(a); }
 template<> EIGEN_STRONG_INLINE Packet4i pabs(const Packet4i& a) { return vec_abs(a); }
 
-template<> EIGEN_STRONG_INLINE Packet4f pshiftright_and_cast(Packet4f a, int n) {
-  return vec_ctf(vec_sr(reinterpret_cast<Packet4i>(a),
-                        reinterpret_cast<Packet4ui>(pset1<Packet4i>(n))),0);
-}
+template<int N> EIGEN_STRONG_INLINE Packet4i pshiftright(Packet4i a)
+{ return vec_sr(a,reinterpret_cast<Packet4ui>(pset1<Packet4i>(N))); }
+template<int N> EIGEN_STRONG_INLINE Packet4i pshiftleft(Packet4i a)
+{ return vec_sl(a,reinterpret_cast<Packet4ui>(pset1<Packet4i>(N))); }
 
 template<> EIGEN_STRONG_INLINE Packet4f pfrexp<Packet4f>(const Packet4f& a, Packet4f& exponent) {
   return pfrexp_float(a,exponent);
-}
-
-template<> EIGEN_STRONG_INLINE Packet4f pcast_and_shiftleft<Packet4f>(Packet4f v, int n)
-{
-  Packet4i vi = vec_cts(v,0);
-  return reinterpret_cast<Packet4f>(vec_sl(vi, reinterpret_cast<Packet4ui>(pset1<Packet4i>(n))));
 }
 
 template<> EIGEN_STRONG_INLINE Packet4f pldexp<Packet4f>(const Packet4f& a, const Packet4f& exponent) {
@@ -807,6 +812,43 @@ template<> EIGEN_STRONG_INLINE Packet4f pblend(const Selector<4>& ifPacket, cons
 }
 
 
+template <>
+struct type_casting_traits<float, int> {
+  enum {
+    VectorizedCast = 1,
+    SrcCoeffRatio = 1,
+    TgtCoeffRatio = 1
+  };
+};
+
+template <>
+struct type_casting_traits<int, float> {
+  enum {
+    VectorizedCast = 1,
+    SrcCoeffRatio = 1,
+    TgtCoeffRatio = 1
+  };
+};
+
+
+template<> EIGEN_STRONG_INLINE Packet4i pcast<Packet4f, Packet4i>(const Packet4f& a) {
+  return vec_cts(a,0);
+}
+
+template<> EIGEN_STRONG_INLINE Packet4f pcast<Packet4i, Packet4f>(const Packet4i& a) {
+  return vec_ctf(a,0);
+}
+
+template<> EIGEN_STRONG_INLINE Packet4i preinterpret<Packet4i,Packet4f>(const Packet4f& a) {
+  return reinterpret_cast<Packet4i>(a);
+}
+
+template<> EIGEN_STRONG_INLINE Packet4f preinterpret<Packet4f,Packet4i>(const Packet4i& a) {
+  return reinterpret_cast<Packet4f>(a);
+}
+
+
+
 //---------- double ----------
 #ifdef __VSX__
 typedef __vector double              Packet2d;
@@ -1023,6 +1065,59 @@ template<> EIGEN_STRONG_INLINE Packet2d preverse(const Packet2d& a)
   return reinterpret_cast<Packet2d>(vec_perm(reinterpret_cast<Packet16uc>(a), reinterpret_cast<Packet16uc>(a), p16uc_REVERSE64));
 }
 template<> EIGEN_STRONG_INLINE Packet2d pabs(const Packet2d& a) { return vec_abs(a); }
+
+// VSX support varies between different compilers and even different
+// versions of the same compiler.  For gcc version >= 4.9.3, we can use
+// vec_cts to efficiently convert Packet2d to Packet2l.  Otherwise, use
+// a slow version that works with older compilers. 
+// Update: apparently vec_cts/vec_ctf intrinsics for 64-bit doubles
+// are buggy, https://gcc.gnu.org/bugzilla/show_bug.cgi?id=70963
+static inline Packet2l ConvertToPacket2l(const Packet2d& x) {
+#if EIGEN_GNUC_AT_LEAST(5, 4) || \
+    (EIGEN_GNUC_AT(6, 1) && __GNUC_PATCHLEVEL__ >= 1)
+  return vec_cts(x, 0);    // TODO: check clang version.
+#else
+  double tmp[2];
+  memcpy(tmp, &x, sizeof(tmp));
+  Packet2l l = { static_cast<long long>(tmp[0]),
+                 static_cast<long long>(tmp[1]) };
+  return l;
+#endif
+}
+
+template<> EIGEN_STRONG_INLINE Packet2d pldexp<Packet2d>(const Packet2d& a, const Packet2d& exponent) {
+  
+  // build 2^n
+  Packet2l emm0 = ConvertToPacket2l(exponent);
+
+#ifdef __POWER8_VECTOR__ 
+  const Packet2l  p2l_1023 = { 1023, 1023 };
+  const Packet2ul p2ul_52 = { 52, 52 };
+  emm0 = vec_add(emm0, p2l_1023);
+  emm0 = vec_sl(emm0, p2ul_52);
+#else
+  // Code is a bit complex for POWER7.  There is actually a
+  // vec_xxsldi intrinsic but it is not supported by some gcc versions.
+  // So we shift (52-32) bits and do a word swap with zeros.
+  const Packet4i p4i_1023 = pset1<Packet4i>(1023);
+  const Packet4i p4i_20 = pset1<Packet4i>(20);    // 52 - 32
+
+  Packet4i emm04i = reinterpret_cast<Packet4i>(emm0);
+  emm04i = vec_add(emm04i, p4i_1023);
+  emm04i = vec_sl(emm04i, reinterpret_cast<Packet4ui>(p4i_20));
+  static const Packet16uc perm = {
+    0x14, 0x15, 0x16, 0x17, 0x00, 0x01, 0x02, 0x03, 
+    0x1c, 0x1d, 0x1e, 0x1f, 0x08, 0x09, 0x0a, 0x0b };
+#ifdef  _BIG_ENDIAN
+  emm0 = reinterpret_cast<Packet2l>(vec_perm(p4i_ZERO, emm04i, perm));
+#else
+  emm0 = reinterpret_cast<Packet2l>(vec_perm(emm04i, p4i_ZERO, perm));
+#endif
+
+#endif
+
+  return pmul(a, reinterpret_cast<Packet2d>(emm0));
+}
 
 template<> EIGEN_STRONG_INLINE double predux<Packet2d>(const Packet2d& a)
 {
