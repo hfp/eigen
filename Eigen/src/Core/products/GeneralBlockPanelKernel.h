@@ -370,10 +370,12 @@ public:
 
     // register block size along the M direction (currently, this one cannot be modified)
     default_mr = (EIGEN_PLAIN_ENUM_MIN(16,NumberOfRegisters)/2/nr)*LhsPacketSize,
-#if defined(EIGEN_HAS_SINGLE_INSTRUCTION_MADD) && !defined(EIGEN_VECTORIZE_ALTIVEC) && !defined(EIGEN_VECTORIZE_VSX)
+#if defined(EIGEN_HAS_SINGLE_INSTRUCTION_MADD) && !defined(EIGEN_VECTORIZE_ALTIVEC) && !defined(EIGEN_VECTORIZE_VSX) \
+    && ((!EIGEN_COMP_MSVC) || (EIGEN_COMP_MSVC>=1914))
     // we assume 16 registers
     // See bug 992, if the scalar type is not vectorizable but that EIGEN_HAS_SINGLE_INSTRUCTION_MADD is defined,
     // then using 3*LhsPacketSize triggers non-implemented paths in syrk.
+    // Bug 1515: MSVC prior to v19.14 yields to register spilling.
     mr = Vectorizable ? 3*LhsPacketSize : default_mr,
 #else
     mr = default_mr,
@@ -1387,18 +1389,16 @@ void gebp_kernel<LhsScalar,RhsScalar,Index,DataMapper,mr,nr,ConjugateLhs,Conjuga
             EIGEN_ASM_COMMENT("begin gebp micro kernel 2pX4");
             RhsPacket B_0, B1, B2, B3, T0;
 
-  
           // NOTE: the begin/end asm comments below work around bug 935!
           // but they are not enough for gcc>=6 without FMA (bug 1637)
           #if EIGEN_GNUC_AT_LEAST(6,0)
-            #define EIGEN_GEBP_2PX4_SPILLING_WORKAROUND asm("" : [a0] "+x" (A0), [a1] "+x" (A1) );
+            #define EIGEN_GEBP_2PX4_SPILLING_WORKAROUND __asm__  ("" : [a0] "+rm" (A0),[a1] "+rm" (A1));
           #else
             #define EIGEN_GEBP_2PX4_SPILLING_WORKAROUND
           #endif
           #define EIGEN_GEBGP_ONESTEP(K) \
             do {                                                                \
               EIGEN_ASM_COMMENT("begin step of gebp micro kernel 2pX4");        \
-              EIGEN_GEBP_2PX4_SPILLING_WORKAROUND                               \
               traits.loadLhs(&blA[(0+2*K)*LhsProgress], A0);                    \
               traits.loadLhs(&blA[(1+2*K)*LhsProgress], A1);                    \
               traits.broadcastRhs(&blB[(0+4*K)*RhsProgress], B_0, B1, B2, B3);  \
@@ -1410,6 +1410,7 @@ void gebp_kernel<LhsScalar,RhsScalar,Index,DataMapper,mr,nr,ConjugateLhs,Conjuga
               traits.madd(A1, B2,  C6, B2);                                     \
               traits.madd(A0, B3,  C3, T0);                                     \
               traits.madd(A1, B3,  C7, B3);                                     \
+              EIGEN_GEBP_2PX4_SPILLING_WORKAROUND                               \
               EIGEN_ASM_COMMENT("end step of gebp micro kernel 2pX4");          \
             } while(false)
             
