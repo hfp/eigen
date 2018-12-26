@@ -520,10 +520,11 @@ template<typename Scalar,typename Packet> void packetmath_real()
   CHECK_CWISE1_IF(internal::packet_traits<Scalar>::HasErfc, std::erfc, internal::perfc);
 #endif
 
-  if(PacketTraits::HasLog && PacketSize>=2)
+  if(PacketSize>=2)
   {
     data1[0] = std::numeric_limits<Scalar>::quiet_NaN();
     data1[1] = std::numeric_limits<Scalar>::epsilon();
+    if(PacketTraits::HasLog)
     {
       packet_helper<PacketTraits::HasLog,Packet> h;
       h.store(data2, internal::plog(h.load(data1)));
@@ -551,6 +552,10 @@ template<typename Scalar,typename Packet> void packetmath_real()
       data1[0] = Scalar(-1.0f);
       h.store(data2, internal::plog(h.load(data1)));
       VERIFY((numext::isnan)(data2[0]));
+
+      data1[0] = std::numeric_limits<Scalar>::infinity();
+      h.store(data2, internal::plog(h.load(data1)));
+      VERIFY((numext::isinf)(data2[0]));
     }
     {
       packet_helper<PacketTraits::HasSqrt,Packet> h;
@@ -558,6 +563,38 @@ template<typename Scalar,typename Packet> void packetmath_real()
       h.store(data2, internal::psqrt(h.load(data1)));
       VERIFY((numext::isnan)(data2[0]));
       VERIFY((numext::isnan)(data2[1]));
+    }
+    if(PacketTraits::HasCos)
+    {
+      packet_helper<PacketTraits::HasCos,Packet> h;
+      for(Scalar k = 1; k<Scalar(1000)/std::numeric_limits<Scalar>::epsilon(); k*=2) {
+        data1[0] = k*Scalar(EIGEN_PI) * internal::random<Scalar>(0.8,1.2);
+        data1[1] = (k+1)*Scalar(EIGEN_PI) * internal::random<Scalar>(0.8,1.2);
+        h.store(data2, internal::pcos(h.load(data1)));
+        VERIFY(data2[0]<=Scalar(1.) && data2[0]>=Scalar(-1.));
+        VERIFY(data2[1]<=Scalar(1.) && data2[1]>=Scalar(-1.));
+        data1[0] = (2*k+1)*Scalar(EIGEN_PI)/2 * internal::random<Scalar>(0.8,1.2);
+        data1[1] = (2*k+3)*Scalar(EIGEN_PI)/2 * internal::random<Scalar>(0.8,1.2);
+        h.store(data2, internal::psin(h.load(data1)));
+        VERIFY(data2[0]<=Scalar(1.) && data2[0]>=Scalar(-1.));
+        VERIFY(data2[1]<=Scalar(1.) && data2[1]>=Scalar(-1.));
+      }
+
+      data1[0] =  std::numeric_limits<Scalar>::infinity();
+      data1[1] = -std::numeric_limits<Scalar>::infinity();
+      h.store(data2, internal::psin(h.load(data1)));
+      VERIFY((numext::isnan)(data2[0]));
+      VERIFY((numext::isnan)(data2[1]));
+
+      h.store(data2, internal::pcos(h.load(data1)));
+      VERIFY((numext::isnan)(data2[0]));
+      VERIFY((numext::isnan)(data2[1]));
+
+      data1[0] =  std::numeric_limits<Scalar>::quiet_NaN();
+      h.store(data2, internal::psin(h.load(data1)));
+      VERIFY((numext::isnan)(data2[0]));
+      h.store(data2, internal::pcos(h.load(data1)));
+      VERIFY((numext::isnan)(data2[0]));
     }
   }
 }

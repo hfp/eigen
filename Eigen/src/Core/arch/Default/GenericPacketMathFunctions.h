@@ -54,6 +54,7 @@ Packet plog_float(const Packet _x)
   // The smallest non denormalized float number.
   const Packet cst_min_norm_pos   = pset1frombits<Packet>( 0x00800000u);
   const Packet cst_minus_inf      = pset1frombits<Packet>( 0xff800000u);
+  const Packet cst_pos_inf        = pset1frombits<Packet>( 0x7f800000u);
 
   // Polynomial coefficients.
   const Packet cst_cephes_SQRTHF = pset1<Packet>(0.707106781186547524f);
@@ -68,9 +69,6 @@ Packet plog_float(const Packet _x)
   const Packet cst_cephes_log_p8 = pset1<Packet>(+3.3333331174E-1f);
   const Packet cst_cephes_log_q1 = pset1<Packet>(-2.12194440e-4f);
   const Packet cst_cephes_log_q2 = pset1<Packet>(0.693359375f);
-
-  Packet invalid_mask = pcmp_lt_or_nan(x, pzero(x));
-  Packet iszero_mask  = pcmp_eq(x,pzero(x));
 
   // Truncate input values to the minimum positive normal.
   x = pmax(x, cst_min_norm_pos);
@@ -117,8 +115,15 @@ Packet plog_float(const Packet _x)
   x   = padd(x, y);
   x   = padd(x, y2);
 
-  // Filter out invalid inputs, i.e. negative arg will be NAN, 0 will be -INF.
-  return pselect(iszero_mask, cst_minus_inf, por(x, invalid_mask));
+  Packet invalid_mask = pcmp_lt_or_nan(_x, pzero(_x));
+  Packet iszero_mask  = pcmp_eq(_x,pzero(_x));
+  Packet pos_inf_mask = pcmp_eq(_x,cst_pos_inf);
+  // Filter out invalid inputs, i.e.:
+  //  - negative arg will be NAN
+  //  - 0 will be -INF
+  //  - +INF will be +INF
+  return pselect(iszero_mask, cst_minus_inf,
+                              por(pselect(pos_inf_mask,cst_pos_inf,x), invalid_mask));
 }
 
 // Exponential function. Works by writing "x = m*log(2) + r" where
@@ -336,6 +341,13 @@ Packet psincos_float(const Packet& _x)
   // Select the correct result from the two polynoms.
   y = ComputeSine ? pselect(poly_mask,y2,y1)
                   : pselect(poly_mask,y1,y2);
+
+  // For very large arguments the the reduction to the [-Pi/4,+Pi/4] range
+  // does not work thus leading to sine/cosine out of the [-1:1] range.
+  // Since computing the sine/cosine for very large entry entries makes little
+  // sense in term of accuracy, we simply clamp to [-1,1]:
+  y = pmin(y,pset1<Packet>( 1.f));
+  y = pmax(y,pset1<Packet>(-1.f));
 
   // Update the sign
   return pxor(y, sign_bit);
