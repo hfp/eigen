@@ -143,6 +143,10 @@ template<> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE half2 pabs<half2>(const half2& 
   return result;
 }
 
+template<> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE half2 ptrue<half2>(const half2& a) {
+  half2 result;
+  *(reinterpret_cast<unsigned*>(&(result))) = 0xffffffffu;
+}  
 
 EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE void
 ptranspose(PacketBlock<half2,2>& kernel) {
@@ -640,6 +644,14 @@ EIGEN_STRONG_INLINE Packet16h float2half(const Packet16f& a) {
 #endif
 }
 
+template<> EIGEN_STRONG_INLINE Packet16h pnot(const Packet16h& a) {
+  Packet16h r; r.x = _mm256_xor_si256(a.x, pcmp_eq(a.x, a.x)); return r;
+}
+
+template<> EIGEN_STRONG_INLINE Packet16h ptrue(const Packet16h& a) {
+  Packet16h r; r.x = Packet8i(ptrue(a.x)); return r;
+}
+
 template<> EIGEN_STRONG_INLINE Packet16h por(const Packet16h& a,const Packet16h& b) {
   // in some cases Packet8i is a wrapper around __m256i, so we need to 
   // cast to Packet8i to call the correct overload.
@@ -653,6 +665,13 @@ template<> EIGEN_STRONG_INLINE Packet16h pand(const Packet16h& a,const Packet16h
 }
 template<> EIGEN_STRONG_INLINE Packet16h pandnot(const Packet16h& a,const Packet16h& b) {
   Packet16h r; r.x = pandnot(Packet8i(a.x),Packet8i(b.x)); return r;
+}
+
+template<> EIGEN_STRONG_INLINE Packet16h pcmp_eq(const Packet16h& a,const Packet16h& b) {
+  Packet16f af = half2float(a);
+  Packet16f bf = half2float(b);
+  Packet16f rf = pcmp_eq(af, bf);
+  return float2half(rf);
 }
 
 template<> EIGEN_STRONG_INLINE Packet16h pnegate(const Packet16h& a) {
@@ -1078,6 +1097,10 @@ EIGEN_STRONG_INLINE Packet8h float2half(const Packet8f& a) {
 #endif
 }
 
+template<> EIGEN_STRONG_INLINE Packet8h ptrue(const Packet8h& a) {
+  Packet8h r; r.x = _mm_cmpeq_epi32(a.x, a.x); return r;
+}
+
 template<> EIGEN_STRONG_INLINE Packet8h por(const Packet8h& a,const Packet8h& b) {
   // in some cases Packet4i is a wrapper around __m128i, so we either need to 
   // cast to Packet4i to directly call the intrinsics as below:
@@ -1091,6 +1114,13 @@ template<> EIGEN_STRONG_INLINE Packet8h pand(const Packet8h& a,const Packet8h& b
 }
 template<> EIGEN_STRONG_INLINE Packet8h pandnot(const Packet8h& a,const Packet8h& b) {
   Packet8h r; r.x = _mm_andnot_si128(b.x,a.x); return r;
+}
+
+template<> EIGEN_STRONG_INLINE Packet8h pcmp_eq(const Packet8h& a,const Packet8h& b) {
+  Packet8f af = half2float(a);
+  Packet8f bf = half2float(b);
+  Packet8f rf = pcmp_eq(af, bf);
+  return float2half(rf);
 }
 
 template<> EIGEN_STRONG_INLINE Packet8h pconj(const Packet8h& a) { return a; }

@@ -214,6 +214,14 @@ pxor(const Packet& a, const Packet& b) { return a ^ b; }
 template<typename Packet> EIGEN_DEVICE_FUNC inline Packet
 pandnot(const Packet& a, const Packet& b) { return a & (~b); }
 
+/** \internal \returns ones */
+template<typename Packet> EIGEN_DEVICE_FUNC inline Packet
+ptrue(const Packet& /*a*/) { Packet b; memset(&b, 0xff, sizeof(b)); return b;}
+
+/** \internal \returns the bitwise not of \a a */
+template <typename Packet> EIGEN_DEVICE_FUNC inline Packet
+pnot(const Packet& a) { return pxor(ptrue(a), a);}
+
 /** \internal \returns \a a shifted by N bits to the right */
 template<int N> EIGEN_DEVICE_FUNC inline int
 pshiftright(const int& a) { return a >> N; }
@@ -250,19 +258,19 @@ pselect(const Packet& mask, const Packet& a, const Packet& b) {
 
 /** \internal \returns a <= b as a bit mask */
 template<typename Packet> EIGEN_DEVICE_FUNC inline Packet
-pcmp_le(const Packet& a, const Packet& b); /* { return a<=b ? pnot(pxor(a,a)) : pxor(a,a); } */
+pcmp_le(const Packet& a, const Packet& b)  { return a<=b ? ptrue(a) : pzero(a); }
 
 /** \internal \returns a < b as a bit mask */
 template<typename Packet> EIGEN_DEVICE_FUNC inline Packet
-pcmp_lt(const Packet& a, const Packet& b); /* { return a<b  ? pnot(pxor(a,a)) : pxor(a,a); } */
+pcmp_lt(const Packet& a, const Packet& b)  { return a<b ? ptrue(a) : pzero(a); }
 
 /** \internal \returns a == b as a bit mask */
 template<typename Packet> EIGEN_DEVICE_FUNC inline Packet
-pcmp_eq(const Packet& a, const Packet& b); /* { return a==b ? pnot(pxor(a,a)) : pxor(a,a); } */
+pcmp_eq(const Packet& a, const Packet& b) { return a==b ? ptrue(a) : pzero(a); }
 
 /** \internal \returns a < b or a==NaN or b==NaN as a bit mask */
 template<typename Packet> EIGEN_DEVICE_FUNC inline Packet
-pcmp_lt_or_nan(const Packet& a, const Packet& b); /* { return pnot(pcmp_le(b,a)); } */
+pcmp_lt_or_nan(const Packet& a, const Packet& b) { return pnot(pcmp_le(b,a)); } 
 
 /** \internal \returns a packet version of \a *from, from must be 16 bytes aligned */
 template<typename Packet> EIGEN_DEVICE_FUNC inline Packet

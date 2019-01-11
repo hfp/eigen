@@ -55,6 +55,8 @@ template<> struct unpacket_traits<Packet8cf> {
   typedef Packet4cf half;
 };
 
+template<> EIGEN_STRONG_INLINE Packet8cf ptrue<Packet8cf>(const Packet8cf& a) { return Packet8cf(ptrue(a.v)); }
+template<> EIGEN_STRONG_INLINE Packet8cf pnot<Packet8cf>(const Packet8cf& a) { return Packet8cf(pnot(a.v)); }
 template<> EIGEN_STRONG_INLINE Packet8cf padd<Packet8cf>(const Packet8cf& a, const Packet8cf& b) { return Packet8cf(_mm512_add_ps(a.v,b.v)); }
 template<> EIGEN_STRONG_INLINE Packet8cf psub<Packet8cf>(const Packet8cf& a, const Packet8cf& b) { return Packet8cf(_mm512_sub_ps(a.v,b.v)); }
 template<> EIGEN_STRONG_INLINE Packet8cf pnegate(const Packet8cf& a)
@@ -79,6 +81,12 @@ template<> EIGEN_STRONG_INLINE Packet8cf pand   <Packet8cf>(const Packet8cf& a, 
 template<> EIGEN_STRONG_INLINE Packet8cf por    <Packet8cf>(const Packet8cf& a, const Packet8cf& b) { return Packet8cf(por(a.v,b.v)); }
 template<> EIGEN_STRONG_INLINE Packet8cf pxor   <Packet8cf>(const Packet8cf& a, const Packet8cf& b) { return Packet8cf(pxor(a.v,b.v)); }
 template<> EIGEN_STRONG_INLINE Packet8cf pandnot<Packet8cf>(const Packet8cf& a, const Packet8cf& b) { return Packet8cf(pandnot(a.v,b.v)); }
+
+template <>
+EIGEN_STRONG_INLINE Packet8cf pcmp_eq(const Packet8cf& a, const Packet8cf& b) {
+  __m512 eq = pcmp_eq<Packet16f>(a.v, b.v);
+  return Packet8cf(pand(eq, _mm512_permute_ps(eq, 0xB1)));
+}
 
 template<> EIGEN_STRONG_INLINE Packet8cf pload <Packet8cf>(const std::complex<float>* from) { EIGEN_DEBUG_ALIGNED_LOAD return Packet8cf(pload<Packet16f>(&numext::real_ref(*from))); }
 template<> EIGEN_STRONG_INLINE Packet8cf ploadu<Packet8cf>(const std::complex<float>* from) { EIGEN_DEBUG_UNALIGNED_LOAD return Packet8cf(ploadu<Packet16f>(&numext::real_ref(*from))); }
@@ -262,10 +270,18 @@ template<> EIGEN_STRONG_INLINE Packet4cd pmul<Packet4cd>(const Packet4cd& a, con
   return Packet4cd(_mm512_fmaddsub_pd(tmp1, b.v, odd));
 }
 
+template<> EIGEN_STRONG_INLINE Packet4cd ptrue<Packet4cd>(const Packet4cd& a) { return Packet4cd(ptrue(a.v)); }
+template<> EIGEN_STRONG_INLINE Packet4cd pnot<Packet4cd>(const Packet4cd& a) { return Packet4cd(pnot(a.v)); }
 template<> EIGEN_STRONG_INLINE Packet4cd pand   <Packet4cd>(const Packet4cd& a, const Packet4cd& b) { return Packet4cd(pand(a.v,b.v)); }
 template<> EIGEN_STRONG_INLINE Packet4cd por    <Packet4cd>(const Packet4cd& a, const Packet4cd& b) { return Packet4cd(por(a.v,b.v)); }
 template<> EIGEN_STRONG_INLINE Packet4cd pxor   <Packet4cd>(const Packet4cd& a, const Packet4cd& b) { return Packet4cd(pxor(a.v,b.v)); }
 template<> EIGEN_STRONG_INLINE Packet4cd pandnot<Packet4cd>(const Packet4cd& a, const Packet4cd& b) { return Packet4cd(pandnot(a.v,b.v)); }
+
+template <>
+EIGEN_STRONG_INLINE Packet4cd pcmp_eq(const Packet4cd& a, const Packet4cd& b) {
+  __m512d eq = pcmp_eq<Packet8d>(a.v, b.v);
+  return Packet4cd(pand(eq, _mm512_permute_pd(eq, 0x55)));
+}
 
 template<> EIGEN_STRONG_INLINE Packet4cd pload <Packet4cd>(const std::complex<double>* from)
 { EIGEN_DEBUG_ALIGNED_LOAD return Packet4cd(pload<Packet8d>((const double*)from)); }
@@ -390,12 +406,40 @@ template<> EIGEN_STRONG_INLINE Packet4cd pcplxflip<Packet4cd>(const Packet4cd& x
 
 EIGEN_DEVICE_FUNC inline void
 ptranspose(PacketBlock<Packet8cf,4>& kernel) {
-  ptranspose(reinterpret_cast<PacketBlock<Packet8d,4>&>(kernel));
+  PacketBlock<Packet8d,4> pb;
+  
+  pb.packet[0] = _mm512_castps_pd(kernel.packet[0].v);
+  pb.packet[1] = _mm512_castps_pd(kernel.packet[1].v);
+  pb.packet[2] = _mm512_castps_pd(kernel.packet[2].v);
+  pb.packet[3] = _mm512_castps_pd(kernel.packet[3].v);
+  ptranspose(pb);
+  kernel.packet[0].v = _mm512_castpd_ps(pb.packet[0]);
+  kernel.packet[1].v = _mm512_castpd_ps(pb.packet[1]);
+  kernel.packet[2].v = _mm512_castpd_ps(pb.packet[2]);
+  kernel.packet[3].v = _mm512_castpd_ps(pb.packet[3]);
 }
 
 EIGEN_DEVICE_FUNC inline void
 ptranspose(PacketBlock<Packet8cf,8>& kernel) {
-  ptranspose(reinterpret_cast<PacketBlock<Packet8d,8>&>(kernel));
+  PacketBlock<Packet8d,8> pb;
+  
+  pb.packet[0] = _mm512_castps_pd(kernel.packet[0].v);
+  pb.packet[1] = _mm512_castps_pd(kernel.packet[1].v);
+  pb.packet[2] = _mm512_castps_pd(kernel.packet[2].v);
+  pb.packet[3] = _mm512_castps_pd(kernel.packet[3].v);
+  pb.packet[4] = _mm512_castps_pd(kernel.packet[4].v);
+  pb.packet[5] = _mm512_castps_pd(kernel.packet[5].v);
+  pb.packet[6] = _mm512_castps_pd(kernel.packet[6].v);
+  pb.packet[7] = _mm512_castps_pd(kernel.packet[7].v);
+  ptranspose(pb);
+  kernel.packet[0].v = _mm512_castpd_ps(pb.packet[0]);
+  kernel.packet[1].v = _mm512_castpd_ps(pb.packet[1]);
+  kernel.packet[2].v = _mm512_castpd_ps(pb.packet[2]);
+  kernel.packet[3].v = _mm512_castpd_ps(pb.packet[3]);
+  kernel.packet[4].v = _mm512_castpd_ps(pb.packet[4]);
+  kernel.packet[5].v = _mm512_castpd_ps(pb.packet[5]);
+  kernel.packet[6].v = _mm512_castpd_ps(pb.packet[6]);
+  kernel.packet[7].v = _mm512_castpd_ps(pb.packet[7]);
 }
 
 EIGEN_DEVICE_FUNC inline void

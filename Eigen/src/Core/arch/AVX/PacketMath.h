@@ -228,6 +228,7 @@ template<> EIGEN_STRONG_INLINE Packet4d pmax<Packet4d>(const Packet4d& a, const 
 template<> EIGEN_STRONG_INLINE Packet8f pcmp_le(const Packet8f& a, const Packet8f& b) { return _mm256_cmp_ps(a,b,_CMP_LE_OQ); }
 template<> EIGEN_STRONG_INLINE Packet8f pcmp_lt(const Packet8f& a, const Packet8f& b) { return _mm256_cmp_ps(a,b,_CMP_LT_OQ); }
 template<> EIGEN_STRONG_INLINE Packet8f pcmp_eq(const Packet8f& a, const Packet8f& b) { return _mm256_cmp_ps(a,b,_CMP_EQ_OQ); }
+template<> EIGEN_STRONG_INLINE Packet4d pcmp_eq(const Packet4d& a, const Packet4d& b) { return _mm256_cmp_pd(a,b,_CMP_EQ_OQ); }
 template<> EIGEN_STRONG_INLINE Packet8f pcmp_lt_or_nan(const Packet8f& a, const Packet8f& b) { return _mm256_cmp_ps(a, b, _CMP_NGE_UQ); }
 
 template<> EIGEN_STRONG_INLINE Packet8i pcmp_eq(const Packet8i& a, const Packet8i& b) {
@@ -248,6 +249,37 @@ template<> EIGEN_STRONG_INLINE Packet4d pceil<Packet4d>(const Packet4d& a) { ret
 
 template<> EIGEN_STRONG_INLINE Packet8f pfloor<Packet8f>(const Packet8f& a) { return _mm256_floor_ps(a); }
 template<> EIGEN_STRONG_INLINE Packet4d pfloor<Packet4d>(const Packet4d& a) { return _mm256_floor_pd(a); }
+
+
+template<> EIGEN_STRONG_INLINE Packet8i ptrue<Packet8i>(const Packet8i& a) {
+#ifdef EIGEN_VECTORIZE_AVX2
+  // vpcmpeqd has lower latency than the more general vcmpps
+  return _mm256_cmpeq_epi32(a,a);
+#else
+  const __m256 b = _mm256_castsi256_ps(a);
+  return _mm256_castps_si256(_mm256_cmp_ps(b,b,_CMP_TRUE_UQ));
+#endif
+}
+
+template<> EIGEN_STRONG_INLINE Packet8f ptrue<Packet8f>(const Packet8f& a) {
+#ifdef EIGEN_VECTORIZE_AVX2
+  // vpcmpeqd has lower latency than the more general vcmpps
+  const __m256i b = _mm256_castps_si256(a);
+  return _mm256_castsi256_ps(_mm256_cmpeq_epi32(b,b));
+#else
+  return _mm256_cmp_ps(a,a,_CMP_TRUE_UQ);
+#endif
+}
+
+template<> EIGEN_STRONG_INLINE Packet4d ptrue<Packet4d>(const Packet4d& a) {
+#ifdef EIGEN_VECTORIZE_AVX2
+  // vpcmpeqq has lower latency than the more general vcmppd
+  const __m256i b = _mm256_castpd_si256(a);
+  return _mm256_castsi256_pd(_mm256_cmpeq_epi64(b,b));
+#else
+  return _mm256_cmp_pd(a,a,_CMP_TRUE_UQ);
+#endif
+}
 
 template<> EIGEN_STRONG_INLINE Packet8f pand<Packet8f>(const Packet8f& a, const Packet8f& b) { return _mm256_and_ps(a,b); }
 template<> EIGEN_STRONG_INLINE Packet4d pand<Packet4d>(const Packet4d& a, const Packet4d& b) { return _mm256_and_pd(a,b); }
