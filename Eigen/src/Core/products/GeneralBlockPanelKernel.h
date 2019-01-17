@@ -350,9 +350,9 @@ inline void computeProductBlockingSizes(Index& k, Index& m, Index& n, Index num_
 template <typename RhsPacket, typename RhsPacketx4, int registers_taken>
 struct RhsPanelHelper {
  private:
-  typedef typename conditional<(registers_taken < 15), RhsPacket, RhsPacketx4>::type inter_type;
+  static const int remaining_registers = EIGEN_ARCH_DEFAULT_NUMBER_OF_REGISTERS - registers_taken;
  public:
-  typedef typename conditional<(EIGEN_ARCH_DEFAULT_NUMBER_OF_REGISTERS < 32), RhsPacket, inter_type>::type type;
+  typedef typename conditional<remaining_registers>=4, RhsPacketx4, RhsPacket>::type type;
 };
 
 template <typename Packet>
@@ -600,8 +600,8 @@ public:
     dest = ploadu<LhsPacketType>(a);
   }
 
-  template <typename LhsPacketType, typename AccPacketType, typename LaneIdType>
-  EIGEN_STRONG_INLINE void madd(const LhsPacketType& a, const RhsPacket& b, AccPacketType& c, RhsPacket& tmp, const LaneIdType&) const
+  template <typename LhsPacketType, typename RhsPacketType, typename AccPacketType, typename LaneIdType>
+  EIGEN_STRONG_INLINE void madd(const LhsPacketType& a, const RhsPacketType& b, AccPacketType& c, RhsPacketType& tmp, const LaneIdType&) const
   {
     madd_impl(a, b, c, tmp, typename conditional<Vectorizable,true_type,false_type>::type());
   }
@@ -820,8 +820,10 @@ public:
     dest = ploadu<LhsPacketType>((const typename unpacket_traits<LhsPacketType>::type*)(a));
   }
 
-  template<typename LhsPacketType, typename ResPacketType, typename TmpType, typename LaneIdType>
-  EIGEN_STRONG_INLINE void madd(const LhsPacketType& a, const RhsPacket& b, DoublePacket<ResPacketType>& c, TmpType& /*tmp*/, const LaneIdType&) const
+  template<typename LhsPacketType, typename RhsPacketType, typename ResPacketType, typename TmpType, typename LaneIdType>
+  EIGEN_STRONG_INLINE
+  typename enable_if<!is_same<RhsPacketType,RhsPacketx4>::value>::type
+  madd(const LhsPacketType& a, const RhsPacketType& b, DoublePacket<ResPacketType>& c, TmpType& /*tmp*/, const LaneIdType&) const
   {
     c.first   = padd(pmul(a,b.first), c.first);
     c.second  = padd(pmul(a,b.second),c.second);
@@ -953,8 +955,8 @@ public:
     dest = ploaddup<LhsPacketType>(a);
   }
 
-  template <typename LhsPacketType, typename AccPacketType, typename LaneIdType>
-  EIGEN_STRONG_INLINE void madd(const LhsPacketType& a, const RhsPacket& b, AccPacketType& c, RhsPacket& tmp, const LaneIdType&) const
+  template <typename LhsPacketType, typename RhsPacketType, typename AccPacketType, typename LaneIdType>
+  EIGEN_STRONG_INLINE void madd(const LhsPacketType& a, const RhsPacketType& b, AccPacketType& c, RhsPacketType& tmp, const LaneIdType&) const
   {
     madd_impl(a, b, c, tmp, typename conditional<Vectorizable,true_type,false_type>::type());
   }
@@ -1307,7 +1309,8 @@ void gebp_kernel<LhsScalar,RhsScalar,Index,DataMapper,mr,nr,ConjugateLhs,Conjuga
           // process remaining peeled loop
           for(Index k=peeled_kc; k<depth; k++)
           {
-            RhsPanel15 rhs_panel, T0;
+            RhsPanel15 rhs_panel;
+            RhsPacket T0;
             LhsPacket A2;
             EIGEN_GEBP_ONESTEP(0);
             blB += 4*RhsProgress;
