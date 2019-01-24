@@ -526,39 +526,36 @@ class PlainObjectBase : public internal::dense_xpr_base<Derived>::type
 //       EIGEN_INITIALIZE_COEFFS_IF_THAT_OPTION_IS_ENABLED
     }
 
-    #ifdef EIGEN_PARSED_BY_DOXYGEN
-    /** \brief Construct a row of column vector with fixed size from an initializer list of coefficients. \cpp11
+    #if EIGEN_HAS_CXX11
+    /** \brief Construct a row of column vector with fixed size from an arbitrary number of coefficients. \cpp11
       *
       * \only_for_vectors
       * 
-      * \warning To construct a column (resp. row) vector of fixed length, the number of values passed through
-      * the initializer list must match the the fixed number of rows (resp. columns) of \c *this.
+      * This constructor is for 1D array or vectors with more than 4 coefficients.
+      * There exists c++98 anologue constructors for fixed-size array/vector having 1, 2, 3, or 4 coefficients.
+      * 
+      * \warning To construct a column (resp. row) vector of fixed length, the number of values passed to this 
+      * constructor must match the the fixed number of rows (resp. columns) of \c *this.
       */
-    EIGEN_DEVICE_FUNC
-    explicit EIGEN_STRONG_INLINE PlainObjectBase(const std::initializer_list<Scalar>& list);
+    template <typename... ArgTypes>
+    EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
+    PlainObjectBase(const Scalar& a0, const Scalar& a1, const Scalar& a2,  const Scalar& a3, const ArgTypes&... args)
+      : m_storage()
+    {
+      _check_template_params();
+      EIGEN_STATIC_ASSERT_VECTOR_SPECIFIC_SIZE(PlainObjectBase, sizeof...(args) + 4);
+      m_storage.data()[0] = a0;
+      m_storage.data()[1] = a1;
+      m_storage.data()[2] = a2;
+      m_storage.data()[3] = a3;
+      int i = 4;
+      auto x = {(m_storage.data()[i++] = args, 0)...};
+      static_cast<void>(x);
+    }
 
     /** \brief Constructs a Matrix or Array and initializes it by elements given by an initializer list of initializer
       * lists \cpp11
       */
-    EIGEN_DEVICE_FUNC
-    explicit EIGEN_STRONG_INLINE PlainObjectBase(const std::initializer_list<std::initializer_list<Scalar>>& list);
-    #else // EIGEN_PARSED_BY_DOXYGEN
-    #if EIGEN_HAS_CXX11
-    template<typename T>
-    EIGEN_DEVICE_FUNC
-    explicit EIGEN_STRONG_INLINE PlainObjectBase(const std::initializer_list<T>& list,
-      typename internal::enable_if<internal::is_same<T, Scalar>::value, T>::type* = 0,
-      typename internal::enable_if<RowsAtCompileTime != Dynamic
-                                   && ColsAtCompileTime != Dynamic
-                                   && IsVectorAtCompileTime ==  1, T>::type* = 0)
-      : m_storage()
-    {
-      _check_template_params();
-      EIGEN_STATIC_ASSERT_FIXED_SIZE(PlainObjectBase);
-      resize(list.size());
-      std::copy(list.begin(), list.end(), m_storage.data());
-    }
-
     EIGEN_DEVICE_FUNC
     explicit EIGEN_STRONG_INLINE PlainObjectBase(const std::initializer_list<std::initializer_list<Scalar>>& list)
       : m_storage()
@@ -593,7 +590,6 @@ class PlainObjectBase : public internal::dense_xpr_base<Derived>::type
       }
     }
     #endif  // end EIGEN_HAS_CXX11
-    #endif  // end EIGEN_PARSED_BY_DOXYGEN
 
     /** \sa PlainObjectBase::operator=(const EigenBase<OtherDerived>&) */
     template<typename OtherDerived>
