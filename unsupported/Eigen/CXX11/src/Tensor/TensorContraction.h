@@ -709,7 +709,7 @@ struct TensorContractionEvaluatorBase
   void evalGemm(Scalar* buffer) const {
 #if defined(EIGEN_USE_LIBXSMM)
     if (NULL != m_xgemm_handle) {
-      libxsmm_gemm_thread(m_xgemm_handle, m_xgemm_scratch, m_leftImpl.data()/*a*/, m_rightImpl.data()/*b*/, buffer/*c*/, 0/*tid*/);
+      libxsmm_gemm_thread(m_xgemm_handle, m_xgemm_scratch, m_leftImpl.data()/*a*/, m_rightImpl.data()/*b*/, buffer/*c*/, 0/*tid*/, 1/*nthreads*/);
       return;
     }
 #endif

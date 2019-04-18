@@ -84,7 +84,7 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
         libxsmm_gemm_thread(this->m_xgemm_handle, this->m_xgemm_scratch,
           this->m_leftImpl.data()/*a*/,
           this->m_rightImpl.data()/*b*/,
-          buffer/*c*/, 0/*tid*/);
+          buffer/*c*/, 0/*tid*/, 1/*nthreads*/);
       } else {
         ContextXsmm<Alignment>(this, buffer).run();
       }
@@ -1242,8 +1242,8 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
       c(buffer)
     {}
 
-    void worker(int tid) {
-      libxsmm_gemm_thread(this->handle, this->scratch, a, b, c, tid);
+    void worker(int tid, int nthreads) {
+      libxsmm_gemm_thread(this->handle, this->scratch, a, b, c, tid, nthreads);
       workers_done.Notify();
     }
 
@@ -1253,7 +1253,7 @@ struct TensorEvaluator<const TensorContractionOp<Indices, LeftArgType, RightArgT
       // function in each thread.
       const int nthreads = device.numThreads();
       for (int tid = 0; tid < nthreads; ++tid) {
-        device.enqueueNoNotification([=]() { worker(tid); });
+        device.enqueueNoNotification([=]() { worker(tid, nthreads); });
       }
       workers_done.Wait();
     }
