@@ -180,6 +180,7 @@ template <typename ResScalar, typename LhsScalar, typename RhsScalar,
     typename StorageIndex, typename OutputMapper, typename LhsMapper,
     typename RhsMapper>
 struct TensorContractionKernel {
+  EIGEN_DEVICE_FUNC
   TensorContractionKernel(StorageIndex m, StorageIndex k, StorageIndex n,
                           StorageIndex bm, StorageIndex bk, StorageIndex bn)
       : m(m), k(k), n(n), bm(bm), bk(bk), bn(bn) {}
@@ -302,9 +303,16 @@ struct NoOpOutputKernel {
    */
   template <typename Index, typename Scalar>
   EIGEN_ALWAYS_INLINE void operator()(
-      const internal::blas_data_mapper<Scalar, Index, ColMajor>& /*output_mapper*/,
-      const TensorContractionParams& /*params*/, Index /*i*/,
-      Index /*j*/, Index /*num_rows*/, Index /*num_cols*/) const {}
+      const internal::blas_data_mapper<Scalar, Index, ColMajor>& output_mapper,
+      const TensorContractionParams& params, Index i,
+      Index j, Index num_rows, Index num_cols) const {
+    EIGEN_UNUSED_VARIABLE(output_mapper);
+    EIGEN_UNUSED_VARIABLE(params);
+    EIGEN_UNUSED_VARIABLE(i);
+    EIGEN_UNUSED_VARIABLE(j);
+    EIGEN_UNUSED_VARIABLE(num_rows);
+    EIGEN_UNUSED_VARIABLE(num_cols);
+  }
 };
 
 template<typename Indices, typename LhsXprType, typename RhsXprType, typename OutputKernelType = const NoOpOutputKernel>
