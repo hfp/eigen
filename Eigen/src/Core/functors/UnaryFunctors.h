@@ -904,14 +904,6 @@ struct scalar_logistic_op {
     return pdiv(one, padd(one, pexp(pnegate(x))));
   }
 };
-template <typename T>
-struct functor_traits<scalar_logistic_op<T> > {
-  enum {
-    Cost = NumTraits<T>::AddCost * 2 + NumTraits<T>::MulCost * 6,
-    PacketAccess = packet_traits<T>::HasAdd && packet_traits<T>::HasDiv &&
-                   packet_traits<T>::HasNegate && packet_traits<T>::HasExp
-  };
-};
 
 /** \internal
   * \brief Template specialization of the logistic function for float.
@@ -974,6 +966,23 @@ struct scalar_logistic_op<float> {
     return pmax(pmin(padd(pdiv(p, q), pset1<Packet>(0.5)), pset1<Packet>(1.0)),
                 pset1<Packet>(0.0));
   }
+};
+
+template <typename T>
+struct functor_traits<scalar_logistic_op<T> > {
+  enum {
+    Cost = scalar_div_cost<T, packet_traits<T>::HasDiv>::value +
+           (internal::is_same<T, float>::value
+                ? NumTraits<T>::AddCost * 12 + NumTraits<T>::MulCost * 11
+                : NumTraits<T>::AddCost * 2 +
+                      functor_traits<scalar_exp_op<T> >::Cost),
+    PacketAccess =
+        packet_traits<T>::HasAdd && packet_traits<T>::HasDiv &&
+        (internal::is_same<T, float>::value
+             ? packet_traits<T>::HasMul && packet_traits<T>::HasMax &&
+                   packet_traits<T>::HasMin
+             : packet_traits<T>::HasNegate && packet_traits<T>::HasExp)
+  };
 };
 
 } // end namespace internal

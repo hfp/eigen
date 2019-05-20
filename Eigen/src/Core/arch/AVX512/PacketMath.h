@@ -103,19 +103,19 @@ struct unpacket_traits<Packet16f> {
   typedef Packet8f half;
   typedef Packet16i integer_packet;
   typedef uint16_t mask_t;
-  enum { size = 16, alignment=Aligned64, vectorizable=true, masked_load_available=true };
+  enum { size = 16, alignment=Aligned64, vectorizable=true, masked_load_available=true, masked_store_available=true };
 };
 template <>
 struct unpacket_traits<Packet8d> {
   typedef double type;
   typedef Packet4d half;
-  enum { size = 8, alignment=Aligned64, vectorizable=true, masked_load_available=false };
+  enum { size = 8, alignment=Aligned64, vectorizable=true, masked_load_available=false, masked_store_available=false };
 };
 template <>
 struct unpacket_traits<Packet16i> {
   typedef int type;
   typedef Packet8i half;
-  enum { size = 16, alignment=Aligned64, vectorizable=false, masked_load_available=false };
+  enum { size = 16, alignment=Aligned64, vectorizable=false, masked_load_available=false, masked_store_available=false };
 };
 
 template <>
@@ -575,6 +575,11 @@ template <>
 EIGEN_STRONG_INLINE void pstoreu<int>(int* to, const Packet16i& from) {
   EIGEN_DEBUG_UNALIGNED_STORE _mm512_storeu_si512(
       reinterpret_cast<__m512i*>(to), from);
+}
+template <>
+EIGEN_STRONG_INLINE void pstoreu<float>(float* to, const Packet16f& from, uint16_t umask) {
+  __mmask16 mask = static_cast<__mmask16>(umask);
+  EIGEN_DEBUG_UNALIGNED_STORE return _mm512_mask_storeu_ps(to, mask, from);
 }
 
 template <>
