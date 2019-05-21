@@ -109,7 +109,7 @@
 #endif
 
 // For the record, here is a table summarizing the possible values for EIGEN_COMP_MSVC:
-//  name  ver   MSC_VER
+//  name        ver   MSC_VER
 //  2008         9      1500
 //  2010        10      1600
 //  2012        11      1700
@@ -121,6 +121,19 @@
 //  2017-14.12  15.5    1912
 //  2017-14.13  15.6    1913
 //  2017-14.14  15.7    1914
+
+/// \internal EIGEN_COMP_MSVC_LANG set to _MSVC_LANG if the compiler is Microsoft Visual C++, 0 otherwise.
+#if defined(_MSVC_LANG)
+  #define EIGEN_COMP_MSVC_LANG _MSVC_LANG
+#else
+  #define EIGEN_COMP_MSVC_LANG 0
+#endif
+
+// For the record, here is a table summarizing the possible values for EIGEN_COMP_MSVC_LANG:
+// MSVC option                          Standard  MSVC_LANG
+// /std:c++14 (default as of VS 2019)   C++14     201402L
+// /std:c++17                           C++17     201703L
+// /std:c++latest                       >C++17    >201703L
 
 /// \internal EIGEN_COMP_MSVC_STRICT set to 1 if the compiler is really Microsoft Visual C++ and not ,e.g., ICC or clang-cl
 #if EIGEN_COMP_MSVC && !(EIGEN_COMP_ICC || EIGEN_COMP_LLVM || EIGEN_COMP_CLANG)
@@ -395,11 +408,8 @@
   #define EIGEN_CUDA_ARCH __CUDA_ARCH__
 #endif
 
-// Starting with CUDA 9 the composite __CUDACC_VER__ is not available.
-#if defined(__CUDACC_VER_MAJOR__) && (__CUDACC_VER_MAJOR__ >= 9)
-  #define EIGEN_CUDACC_VER  ((__CUDACC_VER_MAJOR__ * 10000) + (__CUDACC_VER_MINOR__ * 100))
-#elif defined(__CUDACC_VER__)
-  #define EIGEN_CUDACC_VER __CUDACC_VER__
+#if defined(CUDA_VERSION)
+  #define EIGEN_CUDACC_VER (CUDA_VERSION*10)
 #else
   #define EIGEN_CUDACC_VER 0
 #endif
@@ -512,7 +522,7 @@
 // The macro EIGEN_COMP_CXXVER defines the c++ verson expected by the compiler.
 // For instance, if compiling with gcc and -std=c++17, then EIGEN_COMP_CXXVER
 // is defined to 17.
-#if   (defined(__cplusplus) && (__cplusplus >  201402L) || EIGEN_COMP_MSVC >= 1914)
+#if   (defined(__cplusplus) && (__cplusplus >  201402L) || EIGEN_COMP_MSVC_LANG > 201402L)
 #define EIGEN_COMP_CXXVER 17
 #elif (defined(__cplusplus) && (__cplusplus >  201103L) || EIGEN_COMP_MSVC >= 1910)
 #define EIGEN_COMP_CXXVER 14
